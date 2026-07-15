@@ -16,25 +16,25 @@
     {
       "src": "/tic_tac_toe_hero.png",
       "sizes": "512x512",
-      "type": "image/png",
+      "type": "image/jpeg",
       "purpose": "any"
     },
     {
       "src": "/tic_tac_toe_hero.png",
       "sizes": "192x192",
-      "type": "image/png",
+      "type": "image/jpeg",
       "purpose": "any"
     },
     {
       "src": "/playverse_maskable.png",
       "sizes": "512x512",
-      "type": "image/png",
+      "type": "image/jpeg",
       "purpose": "maskable"
     },
     {
       "src": "/playverse_maskable.png",
       "sizes": "192x192",
-      "type": "image/png",
+      "type": "image/jpeg",
       "purpose": "maskable"
     }
   ],
@@ -42,14 +42,14 @@
     {
       "src": "/tic_tac_toe_hero.png",
       "sizes": "1024x1024",
-      "type": "image/png",
+      "type": "image/jpeg",
       "form_factor": "wide",
       "label": "PlayVerse Arena Tic-Tac-Toe Lobby"
     },
     {
       "src": "/tic_tac_toe_hero.png",
       "sizes": "1024x1024",
-      "type": "image/png",
+      "type": "image/jpeg",
       "form_factor": "narrow",
       "label": "PlayVerse Arena Tic-Tac-Toe Lobby"
     }

@@ -9,11 +9,16 @@ import Link from 'next/link';
 
 export const Navbar: React.FC = () => {
   const { user, logout, isAuthenticated } = useAuthStore();
+  const [mounted, setMounted] = React.useState(false);
 
-  if (!isAuthenticated || !user) return null;
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted || !isAuthenticated || !user) return null;
 
   return (
-    <nav className="glass-panel border-b border-white/5 sticky top-0 z-50 px-6 py-4 flex items-center justify-between shadow-md">
+    <nav className="bg-[#07080c] border-b border-white/5 sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between shadow-lg shadow-black/40">
       <Link href="/" className="flex items-center gap-2 select-none group">
         <span className="bg-gradient-to-r from-violet-600 to-indigo-600 p-2 rounded-lg text-white shadow-md shadow-violet-500/20 group-hover:scale-105 transition-transform duration-200">
           🎮

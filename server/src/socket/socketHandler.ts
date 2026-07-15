@@ -25,16 +25,134 @@ const startRoomTimer = (io: Server, roomCode: string) => {
 
     if (activeRoom.turnTimeLeft <= 0) {
       stopRoomTimer(roomCode);
-      const updatedRoom = await roomManager.handleTimeout(roomCode);
-      if (updatedRoom) {
-        io.to(`room_${roomCode}`).emit('room-updated', updatedRoom);
-        io.to(`room_${roomCode}`).emit('game-over', {
-          winner: updatedRoom.gameState?.winner,
-          reason: 'timeout',
-        });
-        
-        io.emit('stats-updated');
-        await broadcastUserProfileUpdates(io, updatedRoom);
+
+      if (activeRoom.game === 'guess-the-song') {
+        const board = activeRoom.gameState?.board as any;
+        if (!board) return;
+
+        if (board.status === 'playing') {
+          // Log a timeout (incorrect) for the current song round
+          const currentIdx = board.currentSongIndex;
+          if (board.phase === 'guessing_b') {
+            const currentSong = board.songsB[currentIdx];
+            if (currentSong && !board.guessesB[currentIdx]) {
+              board.guessesB[currentIdx] = {
+                songId: currentSong.id,
+                isCorrect: false,
+                timeTaken: 20000
+              };
+            }
+          } else if (board.phase === 'guessing_a') {
+            const currentSong = board.songsA[currentIdx];
+            if (currentSong && !board.guessesA[currentIdx]) {
+              board.guessesA[currentIdx] = {
+                songId: currentSong.id,
+                isCorrect: false,
+                timeTaken: 20000
+              };
+            }
+          }
+
+          board.status = 'reveal';
+          activeRoom.turnTimeLeft = 2; // 2 seconds reveal time
+          io.to(`room_${roomCode}`).emit('room-updated', activeRoom);
+          startRoomTimer(io, roomCode);
+        } else if (board.status === 'reveal') {
+          board.currentSongIndex += 1;
+
+          if (board.currentSongIndex >= 5) {
+            // End of current guessing phase
+            if (board.phase === 'guessing_b') {
+              // Transition to Phase 1.5: Guest curates challenge songs
+              board.phase = 'lobby_a';
+              board.status = 'playing';
+              board.currentSongIndex = 0;
+              
+              activeRoom.turnTimeLeft = 0; // stop timer
+              io.to(`room_${roomCode}`).emit('room-updated', activeRoom);
+            } else if (board.phase === 'guessing_a') {
+              // Finish game and calculate winner
+              board.phase = 'finished';
+              board.status = 'finished';
+              activeRoom.status = 'gameover';
+              activeRoom.gameState!.status = 'gameover';
+
+              // Tally correct counts and times
+              let correctB = 0;
+              let timeB = 0;
+              for (let i = 0; i < 5; i++) {
+                const g = board.guessesB[i];
+                if (g) {
+                  if (g.isCorrect) correctB++;
+                  timeB += g.timeTaken;
+                } else {
+                  timeB += 20000;
+                }
+              }
+
+              let correctA = 0;
+              let timeA = 0;
+              for (let i = 0; i < 5; i++) {
+                const g = board.guessesA[i];
+                if (g) {
+                  if (g.isCorrect) correctA++;
+                  timeA += g.timeTaken;
+                } else {
+                  timeA += 20000;
+                }
+              }
+
+              let winnerId: string | 'draw' = 'draw';
+              if (correctB > correctA) {
+                winnerId = board.guestId;
+              } else if (correctA > correctB) {
+                winnerId = board.hostId;
+              } else {
+                // Ties resolved by response speed
+                if (timeB < timeA) {
+                  winnerId = board.guestId;
+                } else if (timeA < timeB) {
+                  winnerId = board.hostId;
+                } else {
+                  winnerId = 'draw';
+                }
+              }
+
+              activeRoom.gameState!.winner = winnerId;
+              await roomManager.handleGameOver(activeRoom, winnerId);
+
+              io.to(`room_${roomCode}`).emit('room-updated', activeRoom);
+              io.to(`room_${roomCode}`).emit('game-over', {
+                winner: winnerId,
+                reason: 'ended',
+              });
+              io.emit('stats-updated');
+              await broadcastUserProfileUpdates(io, activeRoom);
+            }
+          } else {
+            // Move to next song round in the same phase
+            board.status = 'playing';
+            board.songStartTime = Date.now();
+            board.previewStartOffset = Math.floor(Math.random() * 10);
+            
+            board.difficultyDuration = 20;
+            activeRoom.turnTimeLeft = 20;
+
+            io.to(`room_${roomCode}`).emit('room-updated', activeRoom);
+            startRoomTimer(io, roomCode);
+          }
+        }
+      } else {
+        const updatedRoom = await roomManager.handleTimeout(roomCode);
+        if (updatedRoom) {
+          io.to(`room_${roomCode}`).emit('room-updated', updatedRoom);
+          io.to(`room_${roomCode}`).emit('game-over', {
+            winner: updatedRoom.gameState?.winner,
+            reason: 'timeout',
+          });
+          io.emit('stats-updated');
+          await broadcastUserProfileUpdates(io, updatedRoom);
+        }
       }
     }
   }, 1000);
@@ -173,9 +291,9 @@ export const socketHandler = (io: Server) => {
       }
     });
 
-    socket.on('start-game', () => {
+    socket.on('start-game', async (settings) => {
       try {
-        const room = roomManager.startGame(socket.id);
+        const room = await roomManager.startGame(socket.id, settings);
         io.to(`room_${room.id}`).emit('room-updated', room);
         io.to(`room_${room.id}`).emit('game-started', room);
         
@@ -200,6 +318,17 @@ export const socketHandler = (io: Server) => {
           io.emit('stats-updated');
           await broadcastUserProfileUpdates(io, room);
         } else {
+          if (room.game === 'guess-the-song') {
+            const board = room.gameState?.board as any;
+            if (board) {
+              if (board.status === 'reveal' && room.turnTimeLeft > 2) {
+                room.turnTimeLeft = 2;
+              }
+              if (board.phase === 'guessing_a' && board.status === 'playing' && room.turnTimeLeft !== 20) {
+                room.turnTimeLeft = 20;
+              }
+            }
+          }
           startRoomTimer(io, room.id);
         }
       } catch (err: any) {

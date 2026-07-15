@@ -103,7 +103,8 @@ class RoomManager {
       return room;
     }
 
-    if (room.players.length >= 2) {
+    const maxPlayers = room.game === 'guess-the-song' ? 20 : 2;
+    if (room.players.length >= maxPlayers) {
       throw new Error('Room is full');
     }
 
@@ -132,7 +133,7 @@ class RoomManager {
 
   getPublicRooms(): Room[] {
     return Array.from(this.rooms.values()).filter(
-      (room) => !room.isPrivate && room.status === 'waiting' && room.players.length < 2
+      (room) => !room.isPrivate && room.status === 'waiting' && room.players.length < (room.game === 'guess-the-song' ? 20 : 2)
     );
   }
 
@@ -147,7 +148,7 @@ class RoomManager {
     return room;
   }
 
-  startGame(socketId: string): Room {
+  async startGame(socketId: string, settings?: any): Promise<Room> {
     const room = this.getRoomBySocket(socketId);
     if (!room) throw new Error('Room not found');
     if (room.hostId !== room.players.find(p => p.socketId === socketId)?.id) {
@@ -160,14 +161,136 @@ class RoomManager {
       throw new Error('All players must be ready');
     }
 
-    room.players[0].symbol = 'X';
-    room.players[1].symbol = 'O';
+    if (room.game === 'guess-the-song') {
+      room.players.forEach((p) => {
+        p.symbol = 'Player';
+      });
 
-    const playerIds = room.players.map((p) => p.id);
-    const engine = getGameEngine(room.game);
-    room.gameState = engine.initializeGame(playerIds);
-    room.status = 'playing';
-    room.turnTimeLeft = 30;
+      const cat = settings?.category || 'Pop';
+      let selectedSongs: any[] = [];
+
+      if (settings?.songs && Array.isArray(settings.songs) && settings.songs.length > 0) {
+        selectedSongs = settings.songs.map((t: any) => ({
+          id: String(t.id),
+          title: t.title || 'Unknown Song',
+          artist: t.artist || 'Unknown Artist',
+          album: t.album || 'Single',
+          previewUrl: t.previewUrl || '',
+          artworkUrl: t.artworkUrl || ''
+        }));
+      } else {
+        let searchTerm = 'English Pop';
+        if (cat === 'Bollywood') searchTerm = 'Bollywood Hits';
+        else if (cat === 'Hollywood') searchTerm = 'Hollywood Pop';
+        else if (cat === 'Punjabi') searchTerm = 'Punjabi Pop';
+        else if (cat === 'Anime') searchTerm = 'Anime theme';
+        else if (cat === '90s') searchTerm = '90s Hits';
+        else if (cat === 'Pop') searchTerm = 'English Pop';
+        else if (cat === 'Rock') searchTerm = 'Rock classics';
+        else if (cat === 'Hip Hop') searchTerm = 'Hip Hop';
+        else if (cat === 'Custom') searchTerm = settings?.customSearch || 'Hits';
+
+        let tracks: any[] = [];
+        try {
+          const url = `https://itunes.apple.com/search?term=${encodeURIComponent(searchTerm)}&media=music&entity=song&limit=100`;
+          const response = await fetch(url);
+          const data = await response.json();
+          tracks = data.results || [];
+        } catch (err) {
+          console.error('Error fetching from iTunes Search API:', err);
+        }
+
+        if (tracks.length === 0) {
+          try {
+            const response = await fetch('https://itunes.apple.com/search?term=pop&media=music&entity=song&limit=50');
+            const data = await response.json();
+            tracks = data.results || [];
+          } catch (err) {
+            console.error('Fallback fetch error:', err);
+          }
+        }
+
+        tracks = tracks.filter(t => t.previewUrl).sort(() => Math.random() - 0.5);
+        const numRounds = Math.min(tracks.length, settings?.totalRounds || 10);
+        
+        if (numRounds === 0) {
+          throw new Error('Could not fetch any songs for this category. Please try another one.');
+        }
+
+        selectedSongs = tracks.slice(0, numRounds).map((t: any) => ({
+          id: String(t.trackId),
+          title: t.trackName || 'Unknown Song',
+          artist: t.artistName || 'Unknown Artist',
+          album: t.collectionName || 'Single',
+          previewUrl: t.previewUrl || '',
+          artworkUrl: t.artworkUrl100 ? t.artworkUrl100.replace('100x100bb.jpg', '600x600bb.jpg') : ''
+        }));
+      }
+
+      // Generate 4 multiple choice options per song
+      const fallbackDistractors = [
+        'Believer', 'Shape of You', 'Blinding Lights', 'Dynamite', 
+        'Perfect', 'Bad Habits', 'Stay', 'Levitating', 'Starboy', 
+        'As It Was', 'Flowers', 'Creepin', 'Save Your Tears'
+      ];
+
+      selectedSongs.forEach((song) => {
+        const otherTitles = selectedSongs
+          .filter(s => s.id !== song.id)
+          .map(s => s.title);
+        
+        const distractors: string[] = [];
+        const pool = [...otherTitles].sort(() => Math.random() - 0.5);
+        for (const title of pool) {
+          if (distractors.length < 3 && !distractors.includes(title) && title !== song.title) {
+            distractors.push(title);
+          }
+        }
+
+        let fallbackIdx = 0;
+        while (distractors.length < 3 && fallbackIdx < fallbackDistractors.length) {
+          const item = fallbackDistractors[fallbackIdx];
+          if (!distractors.includes(item) && item !== song.title) {
+            distractors.push(item);
+          }
+          fallbackIdx++;
+        }
+
+        song.options = [song.title, ...distractors].sort(() => Math.random() - 0.5);
+      });
+
+      const hostId = room.hostId;
+      const guest = room.players.find((p) => p.id !== hostId);
+      const playerIds = [hostId, guest ? guest.id : 'Guest'];
+
+      const engine = getGameEngine(room.game);
+      room.gameState = engine.initializeGame(playerIds);
+      room.status = 'playing';
+
+      const board = room.gameState.board;
+      board.songsB = selectedSongs;
+      board.songsA = [];
+      board.phase = 'guessing_b';
+      board.status = 'playing';
+      board.currentSongIndex = 0;
+      board.difficulty = settings?.difficulty || 'medium';
+      
+      board.difficultyDuration = 20;
+      board.songStartTime = Date.now();
+      board.previewStartOffset = Math.floor(Math.random() * 10);
+      board.category = cat;
+
+      room.turnTimeLeft = 20;
+    } else {
+      room.players[0].symbol = 'X';
+      if (room.players[1]) room.players[1].symbol = 'O';
+
+      const playerIds = room.players.map((p) => p.id);
+      const engine = getGameEngine(room.game);
+      room.gameState = engine.initializeGame(playerIds);
+      room.status = 'playing';
+      room.turnTimeLeft = 30;
+    }
 
     return room;
   }
@@ -258,12 +381,26 @@ class RoomManager {
     const room = this.rooms.get(roomCode);
     if (!room || room.status !== 'playing' || !room.gameState) return null;
 
-    const activePlayerId = room.gameState.turn;
-    const opponent = room.players.find((p) => p.id !== activePlayerId);
-    const winnerId = opponent ? opponent.id : 'draw';
+    if (room.game === 'ludo') {
+      const board = room.gameState.board as any;
+      board.hasRolled = false;
+      board.diceRoll = null;
+      board.consecutiveSixes = 0;
+      
+      const players = room.players.map((p) => p.id);
+      const currentIdx = players.indexOf(room.gameState.turn);
+      const nextIdx = (currentIdx + 1) % players.length;
+      room.gameState.turn = players[nextIdx];
+      room.turnTimeLeft = 30;
+      return room;
+    } else {
+      const activePlayerId = room.gameState.turn;
+      const opponent = room.players.find((p) => p.id !== activePlayerId);
+      const winnerId = opponent ? opponent.id : 'draw';
 
-    await this.handleGameOver(room, winnerId);
-    return room;
+      await this.handleGameOver(room, winnerId);
+      return room;
+    }
   }
 
   leaveRoom(socketId: string): { roomCode: string; room?: Room; wasDeleted: boolean } | null {
@@ -323,8 +460,15 @@ class RoomManager {
       room.status = 'playing';
       room.turnTimeLeft = 30;
 
-      room.players[0].symbol = 'X';
-      room.players[1].symbol = 'O';
+      if (room.game === 'ludo') {
+        const colors = ['red', 'yellow', 'green', 'blue'];
+        room.players.forEach((p, idx) => {
+          p.symbol = colors[idx] || 'red';
+        });
+      } else {
+        room.players[0].symbol = 'X';
+        if (room.players[1]) room.players[1].symbol = 'O';
+      }
 
       const playerIds = room.players.map((p) => p.id);
       const engine = getGameEngine(room.game);

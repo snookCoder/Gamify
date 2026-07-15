@@ -19,6 +19,11 @@ export default function Dashboard() {
 
   const [matches, setMatches] = useState<any[]>([]);
   const [loadingMatches, setLoadingMatches] = useState(true);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -51,7 +56,7 @@ export default function Dashboard() {
     }
   }, [isAuthenticated]);
 
-  if (!isAuthenticated || !user) {
+  if (!mounted || !isAuthenticated || !user) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center min-h-screen bg-[#06070a] relative overflow-hidden select-none">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-violet-600/10 rounded-full filter blur-[120px] pointer-events-none" />
@@ -88,6 +93,7 @@ export default function Dashboard() {
 
   const availableGames = [
     { id: 'tic-tac-toe', name: 'Tic-Tac-Toe', emoji: '❌⭕', active: true, desc: 'Align 3 symbols to conquer the board.' },
+    { id: 'guess-the-song', name: 'Guess The Song', emoji: '🎵🎧', active: true, desc: 'Listen to short audio previews and guess the title as fast as possible!' },
     { id: 'chess', name: 'Chess', emoji: '👑♟️', active: false, desc: 'Classic board game of intellect. Coming soon!' },
     { id: 'connect4', name: 'Connect 4', emoji: '🔴🟡', active: false, desc: 'Drop tokens to connect 4 in a row. Coming soon!' },
   ];
@@ -210,7 +216,7 @@ export default function Dashboard() {
                         variant="ghost"
                         size="sm"
                         className="mt-4 p-0 text-violet-400 hover:text-violet-300 font-bold items-center gap-1 hover:bg-transparent cursor-pointer"
-                        onClick={() => router.push(game.id === 'tic-tac-toe' ? '/games/tic-tac-toe' : '#')}
+                        onClick={() => router.push(`/games/${game.id}`)}
                       >
                         Launch Duel <ArrowRight className="w-3.5 h-3.5" />
                       </Button>

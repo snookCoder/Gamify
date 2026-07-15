@@ -9,7 +9,7 @@ import { Chat } from '../../../components/Chat';
 import { GameContainer } from '../../../components/GameContainer';
 import { Avatar } from '../../../components/ui/Avatar';
 import { Button } from '../../../components/ui/Button';
-import { Shield, CheckCircle2, XCircle, Copy, LogOut, Gamepad2, MessageSquare, X, Lock, Link, Swords } from 'lucide-react';
+import { Shield, CheckCircle2, XCircle, Copy, LogOut, Gamepad2, MessageSquare, X, Lock, Link, Swords, Disc } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function RoomPage() {
@@ -31,6 +31,59 @@ export default function RoomPage() {
   const [invitedUserIds, setInvitedUserIds] = useState<Record<string, boolean>>({});
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [lastReadCount, setLastReadCount] = useState(0);
+
+  // Guess The Song host lobby state
+  const [songCategory, setSongCategory] = useState('Pop');
+  const [songDifficulty, setSongDifficulty] = useState('medium');
+  const [songRounds, setSongRounds] = useState(10);
+  const [songCustomSearch, setSongCustomSearch] = useState('');
+
+  const [fetchedSongs, setFetchedSongs] = useState<any[]>([]);
+  const [selectedSongIds, setSelectedSongIds] = useState<string[]>([]);
+  const [loadingSongs, setLoadingSongs] = useState(false);
+
+  useEffect(() => {
+    const isHostLocal = room && user ? room.hostId === user.id : false;
+    if (room && room.game === 'guess-the-song' && isHostLocal) {
+      const fetchSongsLobby = async () => {
+        setLoadingSongs(true);
+        let searchTerm = 'English Pop';
+        if (songCategory === 'Bollywood') searchTerm = 'Bollywood Hits';
+        else if (songCategory === 'Hollywood') searchTerm = 'Hollywood Pop';
+        else if (songCategory === 'Punjabi') searchTerm = 'Punjabi Pop';
+        else if (songCategory === 'Anime') searchTerm = 'Anime theme';
+        else if (songCategory === '90s') searchTerm = '90s Hits';
+        else if (songCategory === 'Pop') searchTerm = 'English Pop';
+        else if (songCategory === 'Rock') searchTerm = 'Rock classics';
+        else if (songCategory === 'Hip Hop') searchTerm = 'Hip Hop';
+        else if (songCategory === 'Custom') searchTerm = songCustomSearch || 'Hits';
+
+        try {
+          const response = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(searchTerm)}&media=music&entity=song&limit=100`);
+          const data = await response.json();
+          const results = data.results || [];
+          const validSongs = results
+            .filter((t: any) => t.previewUrl)
+            .map((t: any) => ({
+              id: String(t.trackId),
+              title: t.trackName || 'Unknown Song',
+              artist: t.artistName || 'Unknown Artist',
+              album: t.collectionName || 'Single',
+              previewUrl: t.previewUrl || '',
+              artworkUrl: t.artworkUrl100 ? t.artworkUrl100.replace('100x100bb.jpg', '600x600bb.jpg') : ''
+            }));
+          setFetchedSongs(validSongs);
+          setSelectedSongIds(validSongs.slice(0, Math.min(validSongs.length, songRounds)).map((s: any) => s.id));
+        } catch (err) {
+          console.error('Error fetching lobby songs:', err);
+        } finally {
+          setLoadingSongs(false);
+        }
+      };
+
+      fetchSongsLobby();
+    }
+  }, [songCategory, songCustomSearch, room?.game, user, songRounds]);
 
   useEffect(() => {
     if (isChatOpen && chatMessages) {
@@ -123,7 +176,16 @@ export default function RoomPage() {
   };
 
   const handleStartGame = () => {
-    startGame();
+    if (room && room.game === 'guess-the-song') {
+      const songsToPlay = fetchedSongs.filter((s) => selectedSongIds.includes(s.id));
+      startGame({
+        category: songCategory,
+        difficulty: songDifficulty,
+        songs: songsToPlay
+      });
+    } else {
+      startGame();
+    }
   };
 
   const handleToggleReady = () => {
@@ -354,6 +416,139 @@ export default function RoomPage() {
                     )}
                   </div>
                 </div>
+
+                {/* Guess the Song Host Settings */}
+                {isHost && room && room.game === 'guess-the-song' && (
+                  <div className="w-full max-w-sm p-4 bg-slate-900/60 backdrop-blur-md rounded-2xl border border-white/5 shadow-inner mb-4 flex flex-col gap-3">
+                    <div className="text-[10px] text-violet-400 font-extrabold uppercase tracking-widest mb-1">
+                      ⚙️ Room Settings (Host Only)
+                    </div>
+                    
+                    <div className="flex flex-col gap-1 text-left">
+                      <label className="text-[10px] text-gray-400 font-bold uppercase">Category</label>
+                      <select 
+                        value={songCategory} 
+                        onChange={(e) => setSongCategory(e.target.value)}
+                        className="bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-violet-500 cursor-pointer animate-none"
+                      >
+                        <option value="Pop">English Pop 🎵</option>
+                        <option value="Bollywood">Bollywood Hits 🇮🇳</option>
+                        <option value="Punjabi">Punjabi Beats 🥁</option>
+                        <option value="Hollywood">Hollywood Soundtracks 🎬</option>
+                        <option value="Anime">Anime Theme Songs 🌟</option>
+                        <option value="90s">90s Retro Hits 💿</option>
+                        <option value="Rock">Classic Rock 🎸</option>
+                        <option value="Hip Hop">Hip Hop / Rap 🎤</option>
+                        <option value="Custom">Custom search... 🔍</option>
+                      </select>
+                    </div>
+
+                    {songCategory === 'Custom' && (
+                      <div className="flex flex-col gap-1 text-left">
+                        <label className="text-[10px] text-gray-400 font-bold uppercase">Custom Term (e.g. Michael Jackson)</label>
+                        <input
+                          type="text"
+                          value={songCustomSearch}
+                          onChange={(e) => setSongCustomSearch(e.target.value)}
+                          placeholder="Type an artist, genre or album..."
+                          className="bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-violet-500"
+                        />
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-3.5">
+                      <div className="flex flex-col gap-1 text-left">
+                        <label className="text-[10px] text-gray-400 font-bold uppercase">Difficulty</label>
+                        <select 
+                          value={songDifficulty} 
+                          onChange={(e) => setSongDifficulty(e.target.value)}
+                          className="bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-violet-500 cursor-pointer animate-none"
+                        >
+                          <option value="easy">Easy (20s preview)</option>
+                          <option value="medium">Medium (15s preview)</option>
+                          <option value="hard">Hard (10s preview)</option>
+                          <option value="extreme">Extreme (5s preview)</option>
+                        </select>
+                      </div>
+
+                      <div className="flex flex-col gap-1 text-left">
+                        <label className="text-[10px] text-gray-400 font-bold uppercase">Rounds</label>
+                        <select 
+                          value={songRounds} 
+                          onChange={(e) => setSongRounds(Number(e.target.value))}
+                          className="bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-violet-500 cursor-pointer animate-none"
+                        >
+                          <option value="5">5 Rounds</option>
+                          <option value="10">10 Rounds</option>
+                          <option value="15">15 Rounds</option>
+                          <option value="20">20 Rounds</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5 text-left border-t border-white/5 pt-2 mt-1">
+                      <label className="text-[10px] text-gray-400 font-bold uppercase flex justify-between">
+                        <span>Select Playlist ({selectedSongIds.length} checked)</span>
+                        {fetchedSongs.length > 0 && (
+                          <button
+                            onClick={() => {
+                              if (selectedSongIds.length === fetchedSongs.length) {
+                                setSelectedSongIds([]);
+                              } else {
+                                setSelectedSongIds(fetchedSongs.map(s => s.id));
+                              }
+                            }}
+                            className="text-[9px] text-violet-400 hover:text-violet-300 font-semibold cursor-pointer select-none border-none bg-transparent p-0"
+                          >
+                            Toggle All
+                          </button>
+                        )}
+                      </label>
+                      
+                      {loadingSongs ? (
+                        <div className="text-[10px] text-gray-500 py-3 text-center animate-pulse">Fetching track list...</div>
+                      ) : fetchedSongs.length === 0 ? (
+                        <div className="text-[10px] text-gray-500 py-3 text-center">No songs found. Try changing category.</div>
+                      ) : (
+                        <div className="max-h-[140px] overflow-y-auto border border-white/5 bg-slate-950/60 rounded-lg p-2 flex flex-col gap-1 scrollbar-thin">
+                          {fetchedSongs.map((song) => {
+                            const isChecked = selectedSongIds.includes(song.id);
+                            return (
+                              <label 
+                                key={song.id} 
+                                className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-white/5 cursor-pointer select-none"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedSongIds((prev) => [...prev, song.id]);
+                                    } else {
+                                      setSelectedSongIds((prev) => prev.filter((id) => id !== song.id));
+                                    }
+                                  }}
+                                  className="accent-violet-500 w-3 h-3 cursor-pointer"
+                                />
+                                <div className="flex items-center gap-2 truncate">
+                                  {song.artworkUrl ? (
+                                    <img src={song.artworkUrl} className="w-5 h-5 rounded object-cover shrink-0" />
+                                  ) : (
+                                    <div className="w-5 h-5 bg-slate-900 flex items-center justify-center shrink-0 rounded"><Disc className="w-3 h-3 text-gray-600" /></div>
+                                  )}
+                                  <div className="flex flex-col leading-tight truncate text-left">
+                                    <span className="text-[10px] font-black text-white truncate max-w-[170px]">{song.title}</span>
+                                    <span className="text-[8px] text-gray-400 truncate max-w-[170px]">{song.artist}</span>
+                                  </div>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Launch Button Section */}
                 <div className="w-full max-w-sm mt-4 z-10">

@@ -69,7 +69,7 @@ interface GameStoreState {
   joinRoom: (roomCode: string) => void;
   leaveRoom: () => void;
   toggleReady: (isReady: boolean) => void;
-  startGame: () => void;
+  startGame: (settings?: any) => void;
   makeMove: (payload: any) => void;
   playAgain: () => void;
   sendChatMessage: (message: string) => void;
@@ -224,10 +224,10 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     }
   },
 
-  startGame: () => {
+  startGame: (settings?: any) => {
     const { socket } = get();
     if (socket) {
-      socket.emit('start-game');
+      socket.emit('start-game', settings);
     }
   },
 

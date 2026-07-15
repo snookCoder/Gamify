@@ -28,6 +28,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${outfit.variable} ${inter.variable} h-full dark`}>
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#8b5cf6" />
+      </head>
       <body className="min-h-full font-sans antialiased text-gray-100 flex flex-col">
         {children}
         <InviteModal />

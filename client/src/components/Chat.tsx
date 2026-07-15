@@ -54,7 +54,7 @@ export const Chat: React.FC = () => {
     .map(([_, name]) => name);
 
   return (
-    <div className="glass-panel rounded-2xl flex flex-col h-[400px] border border-white/5 shadow-lg overflow-hidden">
+    <div className="glass-panel rounded-2xl flex flex-col h-full min-h-[350px] lg:h-[400px] border border-white/5 shadow-lg overflow-hidden">
       <div className="bg-slate-950/40 px-4 py-3 border-b border-white/5">
         <h3 className="font-display font-bold text-xs text-gray-300 tracking-wider uppercase">
           ROOM CHAT

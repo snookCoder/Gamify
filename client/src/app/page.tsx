@@ -153,6 +153,30 @@ export default function Dashboard() {
               </div>
             </div>
 
+            {/* Android APK Download Banner */}
+            <div className="glass-panel rounded-2xl p-5 bg-gradient-to-r from-violet-950/20 to-slate-950/30 border border-violet-500/20 flex flex-col sm:flex-row items-center justify-between gap-5 hover-glow-purple card-transition">
+              <div className="flex items-center gap-4 text-center sm:text-left flex-col sm:flex-row">
+                <div className="w-12 h-12 rounded-xl bg-violet-600/10 border border-violet-500/30 flex items-center justify-center text-violet-400 text-xl shrink-0">
+                  📱
+                </div>
+                <div>
+                  <h3 className="font-display font-bold text-base text-gray-200">PlayVerse Mobile App</h3>
+                  <p className="text-xs text-gray-400 mt-1 leading-relaxed max-w-md">
+                    Download and install our mobile APK to enjoy full-screen gaming, smoother performance, and a native app experience on your phone.
+                  </p>
+                </div>
+              </div>
+              <a 
+                href="/playverse.apk" 
+                download="playverse.apk"
+                className="w-full sm:w-auto shrink-0"
+              >
+                <Button variant="primary" className="w-full sm:w-auto gap-2 py-2.5 px-6 font-bold cursor-pointer">
+                  Download APK
+                </Button>
+              </a>
+            </div>
+
             <div className="glass-panel rounded-2xl p-6">
               <h2 className="font-display font-bold text-lg text-gray-100 mb-5 tracking-wide uppercase">
                 AVAILABLE GAMES

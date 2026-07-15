@@ -1,17 +1,39 @@
 {
   "name": "PlayVerse Arena",
   "short_name": "PlayVerse",
+  "id": "/",
   "start_url": "/",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#090a0f",
   "theme_color": "#8b5cf6",
   "description": "Real-time multiplayer gaming platform. Play Tic-Tac-Toe and challenge online opponents.",
+  "categories": [
+    "games",
+    "entertainment"
+  ],
   "icons": [
     {
       "src": "/window.svg",
       "sizes": "512x512",
       "type": "image/svg+xml",
       "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/tic_tac_toe_hero.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "PlayVerse Arena Tic-Tac-Toe Lobby"
+    },
+    {
+      "src": "/tic_tac_toe_hero.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "PlayVerse Arena Tic-Tac-Toe Lobby"
     }
   ]
 }

@@ -3,6 +3,7 @@ import { Outfit, Inter } from "next/font/google";
 import "./globals.css";
 import { InviteModal } from "../components/InviteModal";
 import { GlobalErrorModal } from "../components/GlobalErrorModal";
+import { PWARegister } from "../components/PWARegister";
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -36,6 +37,7 @@ export default function RootLayout({
         {children}
         <InviteModal />
         <GlobalErrorModal />
+        <PWARegister />
       </body>
     </html>
   );

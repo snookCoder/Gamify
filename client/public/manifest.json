@@ -14,6 +14,12 @@
   ],
   "icons": [
     {
+      "src": "/tic_tac_toe_hero.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
       "src": "/window.svg",
       "sizes": "512x512",
       "type": "image/svg+xml",

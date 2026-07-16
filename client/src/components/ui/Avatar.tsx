@@ -21,8 +21,8 @@ export const Avatar: React.FC<{
   const sizes = {
     sm: 'w-8 h-8 text-sm',
     md: 'w-10 h-10 text-lg',
-    lg: 'w-16 h-16 text-3xl',
-    xl: 'w-24 h-24 text-5xl',
+    lg: 'w-12 h-12 md:w-16 md:h-16 text-2xl md:text-3xl',
+    xl: 'w-20 h-20 md:w-24 md:h-24 text-4xl md:text-5xl',
   };
 
   return (

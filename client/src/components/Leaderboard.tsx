@@ -48,11 +48,11 @@ export const Leaderboard: React.FC = () => {
   }, [socket]);
 
   return (
-    <div className="glass-panel rounded-2xl p-6 flex flex-col h-full shadow-lg card-transition hover:border-violet-500/20 hover-glow-purple">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-2">
-          <Trophy className="w-5 h-5 text-yellow-500" />
-          <h2 className="font-display font-bold text-lg text-gray-100 tracking-wide">
+    <div className="glass-panel rounded-2xl p-4 md:p-6 flex flex-col h-full shadow-lg card-transition hover:border-violet-500/20 hover-glow-purple">
+      <div className="flex items-center justify-between mb-4 md:mb-6">
+        <div className="flex items-center gap-1.5 md:gap-2">
+          <Trophy className="w-4 h-4 md:w-5 md:h-5 text-yellow-500" />
+          <h2 className="font-display font-bold text-base md:text-lg text-gray-100 tracking-wide uppercase">
             GLOBAL LEADERBOARD
           </h2>
         </div>
@@ -87,33 +87,37 @@ export const Leaderboard: React.FC = () => {
               'text-amber-600 shadow-amber-600/10',
             ];
 
+            const textColors = [
+              'text-yellow-400',
+              'text-slate-300',
+              'text-amber-500',
+            ];
+
             return (
               <div
                 key={rankUser._id}
-                className={`flex items-center justify-between p-3 rounded-xl border border-white/5 bg-slate-900/30 hover:bg-slate-900/60 transition-all ${
-                  isTop3 ? 'bg-gradient-to-r from-violet-950/20 to-transparent border-violet-500/10' : ''
-                }`}
+                className="flex items-center justify-between py-3 border-b border-white/5 last:border-b-0 hover:bg-white/[0.01] px-2 rounded-lg transition-all"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-6 text-center text-xs font-bold text-gray-500">
+                <div className="flex items-center gap-2.5 md:gap-3 min-w-0">
+                  <div className="w-6 text-center text-[10px] md:text-xs font-bold text-gray-500 flex items-center justify-center shrink-0">
                     {isTop3 ? (
-                      <Medal className={`w-5 h-5 mx-auto ${trophyColors[index]}`} />
+                      <Medal className={`w-4 h-4 md:w-5 md:h-5 ${trophyColors[index]}`} />
                     ) : (
-                      `#${index + 1}`
+                      <span className="font-mono text-gray-400">#{index + 1}</span>
                     )}
                   </div>
-                  <Avatar name={rankUser.avatar} size="sm" />
-                  <div>
-                    <div className="text-sm font-bold text-gray-200">{rankUser.username}</div>
-                    <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider">
-                      Lvl {rankUser.level} • {rankUser.wins}W - {rankUser.losses}L
+                  <Avatar name={rankUser.avatar} size="sm" className="ring-1 ring-white/5 shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-xs md:text-sm font-bold text-gray-200 truncate max-w-[90px] sm:max-w-[120px]">{rankUser.username}</div>
+                    <div className="text-[9px] text-gray-500 font-semibold uppercase tracking-wider leading-none mt-0.5 whitespace-nowrap">
+                      Lvl {rankUser.level} • {rankUser.wins}W
                     </div>
                   </div>
                 </div>
 
-                <div className="text-right">
-                  <div className="text-sm font-extrabold text-violet-400">{rankUser.rating}</div>
-                  <div className="text-[9px] uppercase tracking-wider text-gray-500 font-bold">
+                <div className="text-right shrink-0">
+                  <div className={`text-xs md:text-sm font-extrabold font-mono leading-none ${isTop3 ? textColors[index] : 'text-violet-400'}`}>{rankUser.rating}</div>
+                  <div className="text-[8px] md:text-[9px] uppercase tracking-wider text-gray-500 font-bold mt-0.5">
                     PTS
                   </div>
                 </div>

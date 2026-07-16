@@ -85,17 +85,15 @@ export default function AuthPage() {
         <div className="flex bg-slate-950/40 p-1.5 rounded-xl border border-white/5 mb-6">
           <button
             onClick={() => { setIsLogin(true); setError(null); }}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-              isLogin ? 'bg-violet-600 text-white shadow-sm' : 'text-gray-400 hover:text-gray-200'
-            }`}
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${isLogin ? 'bg-violet-600 text-white shadow-sm' : 'text-gray-400 hover:text-gray-200'
+              }`}
           >
             LOGIN
           </button>
           <button
             onClick={() => { setIsLogin(false); setError(null); }}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-              !isLogin ? 'bg-violet-600 text-white shadow-sm' : 'text-gray-400 hover:text-gray-200'
-            }`}
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${!isLogin ? 'bg-violet-600 text-white shadow-sm' : 'text-gray-400 hover:text-gray-200'
+              }`}
           >
             REGISTER
           </button>
@@ -131,7 +129,7 @@ export default function AuthPage() {
                   onChange={(e) => setUsername(e.target.value)}
                   required={!isLogin}
                 />
-                
+
                 <div className="space-y-2">
                   <span className="block text-xs font-semibold text-gray-400 uppercase tracking-wider">
                     Choose Avatar
@@ -142,9 +140,8 @@ export default function AuthPage() {
                         key={av}
                         type="button"
                         onClick={() => setSelectedAvatar(av)}
-                        className={`flex items-center justify-center p-1 rounded-full border-2 transition-all cursor-pointer ${
-                          selectedAvatar === av ? 'border-violet-500 scale-105 bg-violet-500/10' : 'border-transparent opacity-70 hover:opacity-100'
-                        }`}
+                        className={`flex items-center justify-center p-1 rounded-full border-2 transition-all cursor-pointer ${selectedAvatar === av ? 'border-violet-500 scale-105 bg-violet-500/10' : 'border-transparent opacity-70 hover:opacity-100'
+                          }`}
                       >
                         <Avatar name={av} size="sm" />
                       </button>

@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import { connectDB } from './config/db';
 import authRoutes from './routes/auth.routes';
 import userRoutes from './routes/user.routes';
+import musicRoutes from './routes/music.routes';
 import { socketHandler } from './socket/socketHandler';
 import { User } from './models/User';
 
@@ -24,6 +25,7 @@ app.use(express.json());
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/music', musicRoutes);
 
 app.get('/', (req, res) => {
   res.json({ message: 'PlayVerse Backend Server is running!' });

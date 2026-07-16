@@ -36,4 +36,10 @@ export const api = {
     getMatchHistory: (userId?: string) => request<any[]>(userId ? `/users/history/${userId}` : '/users/history', { method: 'GET' }),
     updateAvatar: (avatar: string) => request<any>('/users/avatar', { method: 'PUT', body: JSON.stringify({ avatar }) }),
   },
+  music: {
+    search: (term: string, country?: string) => {
+      const countryParam = country ? `&country=${country}` : '';
+      return request<any>(`/music/search?term=${encodeURIComponent(term)}${countryParam}`, { method: 'GET' });
+    }
+  }
 };

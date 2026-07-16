@@ -12,9 +12,12 @@ import {
   Send,
   XCircle,
   Play,
-  RotateCcw
+  RotateCcw,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useGameStore } from '../../store/useGameStore';
+import { api } from '../../services/api';
 
 interface BoardProps {
   board: any; // GuessTheSongBoard
@@ -96,11 +99,17 @@ export default function GuessTheSong({
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Guest Lobby Search Playlist State
-  const [songCategory, setSongCategory] = useState('Pop');
+  const [songCategory, setSongCategory] = useState('Bollywood');
   const [songCustomSearch, setSongCustomSearch] = useState('');
   const [fetchedSongs, setFetchedSongs] = useState<any[]>([]);
-  const [selectedSongIds, setSelectedSongIds] = useState<string[]>([]);
+  const [selectedSongs, setSelectedSongs] = useState<any[]>([]);
+  const selectedSongIds = selectedSongs.map((s) => s.id);
   const [loadingSongs, setLoadingSongs] = useState(false);
+  const [isMusicModalOpen, setIsMusicModalOpen] = useState(false);
+  const [musicSearchQuery, setMusicSearchQuery] = useState('');
+  const [opponentSelectedCount, setOpponentSelectedCount] = useState(0);
+
+  const { socket } = useGameStore();
 
   // Option Click state
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
@@ -118,6 +127,10 @@ export default function GuessTheSong({
     : board.guessesA[board.currentSongIndex];
 
   const isMyGuessingTurn = (board.phase === 'guessing_b' && isGuest) || (board.phase === 'guessing_a' && isHost);
+
+  const opponentGuess = !isMyGuessingTurn 
+    ? (board.phase === 'guessing_b' ? board.guessesB[board.currentSongIndex] : board.guessesA[board.currentSongIndex])
+    : null;
 
   // Clear local selected option between rounds
   useEffect(() => {
@@ -170,20 +183,10 @@ export default function GuessTheSong({
     if (board.phase === 'lobby_a' && isGuest) {
       const fetchSongsLobby = async () => {
         setLoadingSongs(true);
-        let searchTerm = 'English Pop';
-        if (songCategory === 'Bollywood') searchTerm = 'Bollywood Hits';
-        else if (songCategory === 'Hollywood') searchTerm = 'Hollywood Pop';
-        else if (songCategory === 'Punjabi') searchTerm = 'Punjabi Pop';
-        else if (songCategory === 'Anime') searchTerm = 'Anime theme';
-        else if (songCategory === '90s') searchTerm = '90s Hits';
-        else if (songCategory === 'Pop') searchTerm = 'English Pop';
-        else if (songCategory === 'Rock') searchTerm = 'Rock classics';
-        else if (songCategory === 'Hip Hop') searchTerm = 'Hip Hop';
-        else if (songCategory === 'Custom') searchTerm = songCustomSearch || 'Hits';
+        let searchTerm = musicSearchQuery ? musicSearchQuery : 'Bollywood Hits';
 
         try {
-          const response = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(searchTerm)}&media=music&entity=song&limit=100`);
-          const data = await response.json();
+          const data = await api.music.search(searchTerm, 'IN');
           const results = data.results || [];
           const validSongs = results
             .filter((t: any) => t.previewUrl)
@@ -193,11 +196,10 @@ export default function GuessTheSong({
               artist: t.artistName || 'Unknown Artist',
               album: t.collectionName || 'Single',
               previewUrl: t.previewUrl || '',
-              artworkUrl: t.artworkUrl100 ? t.artworkUrl100.replace('100x100bb.jpg', '600x600bb.jpg') : '',
+              artworkUrl: '',
               options: []
             }));
           setFetchedSongs(validSongs);
-          setSelectedSongIds(validSongs.slice(0, 5).map((s: any) => s.id));
         } catch (err) {
           console.error('Error fetching lobby songs:', err);
         } finally {
@@ -205,9 +207,33 @@ export default function GuessTheSong({
         }
       };
 
-      fetchSongsLobby();
+      const timerId = setTimeout(() => {
+        fetchSongsLobby();
+      }, 300);
+
+      return () => clearTimeout(timerId);
     }
-  }, [songCategory, songCustomSearch, board.phase, isGuest]);
+  }, [musicSearchQuery, board.phase, isGuest]);
+
+  // Send curation progress to opponent
+  useEffect(() => {
+    if (socket && board.phase === 'lobby_a' && selectedSongIds.length > 0) {
+      socket.emit('curation-progress', { count: selectedSongIds.length });
+    }
+  }, [selectedSongIds.length, socket, board.phase]);
+
+  // Listen to opponent curation progress
+  useEffect(() => {
+    if (socket) {
+      const handleOpponentProgress = (data: { count: number }) => {
+        setOpponentSelectedCount(data.count);
+      };
+      socket.on('opponent-curation-progress', handleOpponentProgress);
+      return () => {
+        socket.off('opponent-curation-progress', handleOpponentProgress);
+      };
+    }
+  }, [socket]);
 
   // 1. Lobby_a layout for Guest/Host
   if (board.phase === 'lobby_a') {
@@ -224,13 +250,17 @@ export default function GuessTheSong({
           </motion.div>
           <h2 className="font-display font-black text-2xl text-white">Opponent Curating Playlist...</h2>
           <p className="text-sm text-gray-400 mt-2 max-w-sm leading-relaxed">
-            Player B (Guest) is choosing 5 songs to challenge you. Get ready, you will guess their songs in the next phase!
+            {opponentSelectedCount > 0 ? (
+              <span className="text-violet-400 font-bold animate-pulse">Opponent is curating music ({opponentSelectedCount}/5 selected)...</span>
+            ) : (
+              <span>Player B (Guest) is choosing 5 songs to challenge you. Get ready, you will guess their songs in the next phase!</span>
+            )}
           </p>
         </div>
       );
     }
 
-    const songsToPlay = fetchedSongs.filter((s) => selectedSongIds.includes(s.id));
+    const songsToPlay = selectedSongs;
 
     return (
       <div className="w-full max-w-2xl mx-auto flex flex-col items-center p-6 bg-slate-950/40 border border-white/5 rounded-3xl min-h-[460px] text-center shadow-2xl relative select-none">
@@ -246,85 +276,179 @@ export default function GuessTheSong({
 
         {/* Search selectors */}
         <div className="w-full max-w-md flex flex-col gap-3 my-4">
-          <div className="flex flex-col gap-1 text-left">
-            <label className="text-[10px] text-gray-500 font-bold uppercase">Category</label>
-            <select 
-              value={songCategory} 
-              onChange={(e) => setSongCategory(e.target.value)}
-              className="bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-violet-500 cursor-pointer animate-none"
-            >
-              <option value="Pop">English Pop 🎵</option>
-              <option value="Bollywood">Bollywood Hits 🇮🇳</option>
-              <option value="Punjabi">Punjabi Beats 🥁</option>
-              <option value="Hollywood">Hollywood Soundtracks 🎬</option>
-              <option value="Anime">Anime Theme Songs 🌟</option>
-              <option value="90s">90s Retro Hits 💿</option>
-              <option value="Rock">Classic Rock 🎸</option>
-              <option value="Hip Hop">Hip Hop / Rap 🎤</option>
-              <option value="Custom">Custom search... 🔍</option>
-            </select>
-          </div>
-
-          {songCategory === 'Custom' && (
-            <div className="flex flex-col gap-1 text-left">
-              <label className="text-[10px] text-gray-500 font-bold uppercase">Custom Search Term</label>
-              <input
-                type="text"
-                value={songCustomSearch}
-                onChange={(e) => setSongCustomSearch(e.target.value)}
-                placeholder="Artist, album or song..."
-                className="bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-violet-500"
-              />
-            </div>
-          )}
-
-          {/* Checklist */}
-          <div className="flex flex-col gap-1.5 text-left border-t border-white/5 pt-3">
-            <label className="text-[10px] text-gray-400 font-bold uppercase flex justify-between">
-              <span>Choose 5 Tracks ({selectedSongIds.length}/5 selected)</span>
-            </label>
-            
-            {loadingSongs ? (
-              <div className="text-[10px] text-gray-500 py-8 text-center animate-pulse">Loading iTunes tracks...</div>
-            ) : fetchedSongs.length === 0 ? (
-              <div className="text-[10px] text-gray-500 py-8 text-center">No songs found. Change category.</div>
-            ) : (
-              <div className="max-h-[160px] overflow-y-auto border border-white/5 bg-slate-950/60 rounded-lg p-2.5 flex flex-col gap-1.5 scrollbar-thin">
-                {fetchedSongs.map((song) => {
-                  const isChecked = selectedSongIds.includes(song.id);
-                  return (
-                    <label 
-                      key={song.id} 
-                      className={`flex items-center justify-between px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${isChecked ? 'bg-violet-600/10' : 'hover:bg-white/5'}`}
-                    >
-                      <div className="flex items-center gap-2.5 truncate">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              if (selectedSongIds.length >= 5) return;
-                              setSelectedSongIds((prev) => [...prev, song.id]);
-                            } else {
-                              setSelectedSongIds((prev) => prev.filter((id) => id !== song.id));
-                            }
-                          }}
-                          disabled={!isChecked && selectedSongIds.length >= 5}
-                          className="accent-violet-500 w-3.5 h-3.5 cursor-pointer disabled:opacity-40"
-                        />
-                        <img src={song.artworkUrl} className="w-5.5 h-5.5 rounded object-cover shrink-0" />
-                        <div className="flex flex-col leading-tight truncate text-left">
-                          <span className="text-[10px] font-black text-white truncate max-w-[200px]">{song.title}</span>
-                          <span className="text-[8px] text-gray-400 truncate max-w-[200px]">{song.artist}</span>
-                        </div>
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <Button
+            variant="outline"
+            onClick={() => setIsMusicModalOpen(true)}
+            className="w-full py-3.5 text-xs font-bold border-violet-500/30 text-violet-400 hover:bg-violet-500/10 cursor-pointer flex items-center justify-center gap-1.5"
+          >
+            <Music className="w-4 h-4" /> Select Challenge Music ({selectedSongIds.length}/5)
+          </Button>
         </div>
+
+        {/* Curation Music Selection Modal */}
+        {isMusicModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              onClick={() => setIsMusicModalOpen(false)}
+              className="absolute inset-0 bg-slate-950/70 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              className="w-full max-w-4xl bg-[#090a0f] border border-violet-500/20 rounded-3xl p-5 shadow-2xl z-10 flex flex-col gap-4 relative overflow-hidden h-[90vh] md:h-[600px]"
+            >
+              <div className="absolute top-0 left-0 w-full h-[1.5px] bg-gradient-to-r from-violet-600 via-transparent to-cyan-500 opacity-50" />
+              
+              <div className="flex items-center justify-between pb-2 border-b border-white/5">
+                <div className="flex flex-col text-left">
+                  <span className="text-[9px] font-black text-violet-400 uppercase tracking-widest font-mono">Bollywood Challenge Curation</span>
+                  <h3 className="font-display font-black text-base text-gray-100 mt-0.5">Select exactly 5 songs</h3>
+                </div>
+                <button
+                  onClick={() => setIsMusicModalOpen(false)}
+                  className="p-1 rounded hover:bg-white/5 text-gray-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0">
+                {/* Left side: Search & Results */}
+                <div className="flex-1 flex flex-col gap-3 min-h-0">
+                  {/* Search Input */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={musicSearchQuery}
+                      onChange={(e) => setMusicSearchQuery(e.target.value)}
+                      placeholder="Search Bollywood songs or artists (e.g. Arijit Singh)..."
+                      className="w-full bg-slate-950/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-gray-200 focus:outline-none focus:border-violet-500"
+                    />
+                  </div>
+
+                  {/* Song search list results */}
+                  <div className="flex-1 overflow-y-auto border border-white/5 bg-slate-950/40 rounded-2xl p-2 flex flex-col gap-1.5 scrollbar-thin font-sans">
+                    {loadingSongs ? (
+                      <div className="flex-1 flex flex-col items-center justify-center text-[11px] text-gray-500 py-12 italic animate-pulse">
+                        Searching tracks...
+                      </div>
+                    ) : fetchedSongs.length === 0 ? (
+                      <div className="flex-1 flex flex-col items-center justify-center text-[11px] text-gray-500 py-12 italic">
+                        No Bollywood songs found. Try a different search!
+                      </div>
+                    ) : (
+                      fetchedSongs.map((song) => {
+                        const isChecked = selectedSongIds.includes(song.id);
+                        return (
+                          <div 
+                            key={song.id} 
+                            className={`flex items-center justify-between p-2 rounded-xl border transition-colors select-none ${
+                              isChecked ? 'bg-violet-600/10 border-violet-500/20' : 'border border-transparent hover:bg-white/5'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 truncate">
+                              <div className="w-8 h-8 bg-slate-900 flex items-center justify-center shrink-0 rounded shadow-md border border-white/5">
+                                <Disc className="w-4 h-4 text-gray-600" />
+                              </div>
+                              <div className="flex flex-col leading-tight truncate text-left">
+                                <span className="text-[11px] font-black text-white truncate max-w-[200px]">{song.title}</span>
+                                <span className="text-[9px] text-gray-400 truncate max-w-[200px] mt-0.5">{song.artist}</span>
+                              </div>
+                            </div>
+
+                            {isChecked ? (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedSongs((prev) => prev.filter((s) => s.id !== song.id))}
+                                className="w-7 h-7 flex items-center justify-center rounded-lg bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 hover:bg-rose-600/20 hover:border-rose-500/30 hover:text-rose-400 cursor-pointer transition-all shrink-0 text-xs font-black font-mono shadow-sm"
+                                title="Remove from queue"
+                              >
+                                ✓
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (selectedSongs.length >= 5) return;
+                                  setSelectedSongs((prev) => [...prev, song]);
+                                }}
+                                disabled={selectedSongs.length >= 5}
+                                className="w-7 h-7 flex items-center justify-center rounded-lg bg-violet-600/20 border border-violet-500/30 text-violet-400 hover:bg-violet-600 hover:text-white disabled:opacity-40 disabled:hover:bg-violet-600/20 disabled:hover:text-violet-400 cursor-pointer transition-all shrink-0 text-sm font-bold font-mono shadow-sm"
+                                title="Add to queue"
+                              >
+                                +
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* Right side: Selected Songs Queue */}
+                <div className="w-full md:w-[280px] flex flex-col gap-3 min-h-0 border-t md:border-t-0 md:border-l border-white/5 pt-4 md:pt-0 md:pl-5">
+                  <div className="flex justify-between items-center text-[10px] text-gray-400 font-mono font-bold px-1">
+                    <span className="uppercase tracking-widest text-violet-400 font-mono">Selected Queue</span>
+                    <span>{selectedSongs.length} / 5</span>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto border border-white/5 bg-slate-950/40 rounded-2xl p-2 flex flex-col gap-1.5 scrollbar-thin min-h-[120px]">
+                    {selectedSongs.length === 0 ? (
+                      <div className="flex-1 flex flex-col items-center justify-center text-[10px] text-gray-500 text-center py-8 px-2 italic leading-relaxed">
+                        Queue is empty.<br />Add 5 songs from search results.
+                      </div>
+                    ) : (
+                      selectedSongs.map((song, idx) => (
+                        <div 
+                          key={song.id} 
+                          className="flex items-center justify-between p-2 rounded-xl bg-violet-950/10 border border-violet-500/10 hover:border-violet-500/20 transition-all"
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="text-[9px] font-mono font-bold text-violet-400/80 w-3 text-right">{idx + 1}</span>
+                            <div className="w-7 h-7 bg-slate-900 flex items-center justify-center shrink-0 rounded shadow-md border border-white/5">
+                              <Disc className="w-3.5 h-3.5 text-gray-600" />
+                            </div>
+                            <div className="flex flex-col leading-tight truncate text-left">
+                              <span className="text-[10px] font-bold text-white truncate max-w-[130px]">{song.title}</span>
+                              <span className="text-[8px] text-gray-400 truncate max-w-[130px] mt-0.5">{song.artist}</span>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setSelectedSongs((prev) => prev.filter((s) => s.id !== song.id))}
+                            className="w-6 h-6 flex items-center justify-center rounded-lg bg-rose-600/10 border border-rose-500/20 text-rose-400 hover:bg-rose-600 hover:text-white cursor-pointer transition-all shrink-0 text-xs font-bold font-mono shadow-sm"
+                            title="Remove"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  
+                  {selectedSongs.length !== 5 && (
+                    <div className="text-[9px] text-center text-amber-400/80 font-mono py-1.5 bg-amber-500/5 border border-amber-500/10 rounded-xl font-sans">
+                      ⚠️ Select {5 - selectedSongs.length} more song(s)
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <Button
+                variant="primary"
+                disabled={selectedSongs.length !== 5}
+                onClick={() => setIsMusicModalOpen(false)}
+                className="w-full py-3 text-xs font-black tracking-wider uppercase rounded-xl cursor-pointer mt-1"
+              >
+                Confirm Selection
+              </Button>
+            </motion.div>
+          </div>
+        )}
 
         <Button
           variant="primary"
@@ -451,6 +575,24 @@ export default function GuessTheSong({
       
       {/* Playfield Area */}
       <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-950/40 border border-white/5 rounded-3xl relative overflow-hidden min-h-[460px] shadow-xl">
+        {/* Opponent guessed popup overlay */}
+        {!isMyGuessingTurn && opponentGuess && board.status === 'playing' && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-xs">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-slate-900/95 border border-violet-500/30 rounded-3xl p-6 flex flex-col items-center text-center max-w-xs shadow-2xl relative"
+            >
+              <div className="w-12 h-12 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center text-xl mb-3 text-violet-400 animate-bounce">
+                ✓
+              </div>
+              <h4 className="text-sm font-display font-black text-white">Opponent Submitted Guess!</h4>
+              <p className="text-[10px] text-gray-400 mt-1">
+                They answered in {((opponentGuess.timeTaken || 0) / 1000).toFixed(2)}s. Waiting for round timer to reveal the song!
+              </p>
+            </motion.div>
+          </div>
+        )}
         <div className="absolute -top-16 -left-16 w-64 h-64 bg-violet-600/5 rounded-full filter blur-3xl pointer-events-none" />
         <div className="absolute -bottom-16 -right-16 w-64 h-64 bg-cyan-600/5 rounded-full filter blur-3xl pointer-events-none" />
 

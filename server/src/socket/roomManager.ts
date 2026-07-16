@@ -192,7 +192,8 @@ class RoomManager {
 
         let tracks: any[] = [];
         try {
-          const url = `https://itunes.apple.com/search?term=${encodeURIComponent(searchTerm)}&media=music&entity=song&limit=100`;
+          const countryParam = (cat === 'Bollywood' || cat === 'Punjabi') ? '&country=IN' : '';
+          const url = `https://itunes.apple.com/search?term=${encodeURIComponent(searchTerm)}${countryParam}&media=music&entity=song&limit=100`;
           const response = await fetch(url);
           const data = await response.json();
           tracks = data.results || [];
@@ -202,7 +203,9 @@ class RoomManager {
 
         if (tracks.length === 0) {
           try {
-            const response = await fetch('https://itunes.apple.com/search?term=pop&media=music&entity=song&limit=50');
+            const countryParam = (cat === 'Bollywood' || cat === 'Punjabi') ? '&country=IN' : '';
+            const fallbackTerm = (cat === 'Bollywood' || cat === 'Punjabi') ? 'bollywood' : 'pop';
+            const response = await fetch(`https://itunes.apple.com/search?term=${fallbackTerm}${countryParam}&media=music&entity=song&limit=50`);
             const data = await response.json();
             tracks = data.results || [];
           } catch (err) {
@@ -223,7 +226,7 @@ class RoomManager {
           artist: t.artistName || 'Unknown Artist',
           album: t.collectionName || 'Single',
           previewUrl: t.previewUrl || '',
-          artworkUrl: t.artworkUrl100 ? t.artworkUrl100.replace('100x100bb.jpg', '600x600bb.jpg') : ''
+          artworkUrl: ''
         }));
       }
 
@@ -436,7 +439,7 @@ class RoomManager {
     return { roomCode: code, room, wasDeleted: false };
   }
 
-  restartGame(socketId: string): { room: Room; startRematch: boolean } {
+  async restartGame(socketId: string): Promise<{ room: Room; startRematch: boolean }> {
     const room = this.getRoomBySocket(socketId);
     if (!room) throw new Error('Room not found');
 
@@ -458,21 +461,116 @@ class RoomManager {
     if (room.rematchRequests.length >= 2) {
       room.rematchRequests = [];
       room.status = 'playing';
-      room.turnTimeLeft = 30;
 
       if (room.game === 'ludo') {
         const colors = ['red', 'yellow', 'green', 'blue'];
         room.players.forEach((p, idx) => {
           p.symbol = colors[idx] || 'red';
         });
+      } else if (room.game === 'guess-the-song') {
+        room.players.forEach((p) => {
+          p.symbol = 'Player';
+        });
       } else {
         room.players[0].symbol = 'X';
         if (room.players[1]) room.players[1].symbol = 'O';
       }
 
-      const playerIds = room.players.map((p) => p.id);
-      const engine = getGameEngine(room.game);
-      room.gameState = engine.initializeGame(playerIds);
+      if (room.game === 'guess-the-song') {
+        // Rematch logic for Guess the Song: fetch fresh Bollywood tracks
+        let oldCategory = 'Bollywood';
+        let oldDifficulty = 'medium';
+        if (room.gameState && room.gameState.board) {
+          const oldBoard = room.gameState.board as any;
+          oldCategory = oldBoard.category || 'Bollywood';
+          oldDifficulty = oldBoard.difficulty || 'medium';
+        }
+
+        let searchTerm = 'Bollywood Hits';
+        let tracks: any[] = [];
+        try {
+          const url = `https://itunes.apple.com/search?term=${encodeURIComponent(searchTerm)}&media=music&entity=song&limit=100`;
+          const response = await fetch(url);
+          const data = await response.json();
+          tracks = data.results || [];
+        } catch (err) {
+          console.error('Error fetching rematch songs:', err);
+        }
+
+        if (tracks.length === 0) {
+          try {
+            const response = await fetch('https://itunes.apple.com/search?term=bollywood&media=music&entity=song&limit=50');
+            const data = await response.json();
+            tracks = data.results || [];
+          } catch (err) {
+            console.error('Rematch fallback fetch error:', err);
+          }
+        }
+
+        tracks = tracks.filter(t => t.previewUrl).sort(() => Math.random() - 0.5);
+        const selectedSongs = tracks.slice(0, 5).map((t: any) => ({
+          id: String(t.trackId),
+          title: t.trackName || 'Unknown Song',
+          artist: t.artistName || 'Unknown Artist',
+          album: t.collectionName || 'Single',
+          previewUrl: t.previewUrl || '',
+          artworkUrl: '',
+          options: [] as string[]
+        }));
+
+        const fallbackDistractors = [
+          'Tum Hi Ho', 'Kesariya', 'Channa Mereya', 'Apna Bana Le', 
+          'Raataan Lambiyan', 'Dil Diyan Gallan', 'Zaalima', 'Gerua'
+        ];
+
+        selectedSongs.forEach((song) => {
+          const otherTitles = selectedSongs
+            .filter(s => s.id !== song.id)
+            .map(s => s.title);
+          
+          const distractors: string[] = [];
+          const pool = [...otherTitles].sort(() => Math.random() - 0.5);
+          for (const title of pool) {
+            if (distractors.length < 3 && !distractors.includes(title) && title !== song.title) {
+              distractors.push(title);
+            }
+          }
+
+          let fallbackIdx = 0;
+          while (distractors.length < 3 && fallbackIdx < fallbackDistractors.length) {
+            const item = fallbackDistractors[fallbackIdx];
+            if (!distractors.includes(item) && item !== song.title) {
+              distractors.push(item);
+            }
+            fallbackIdx++;
+          }
+
+          song.options = [song.title, ...distractors].sort(() => Math.random() - 0.5);
+        });
+
+        const playerIds = room.players.map((p) => p.id);
+        const engine = getGameEngine(room.game);
+        room.gameState = engine.initializeGame(playerIds);
+
+        const board = room.gameState.board;
+        board.songsB = selectedSongs;
+        board.songsA = [];
+        board.phase = 'guessing_b';
+        board.status = 'playing';
+        board.currentSongIndex = 0;
+        board.difficulty = oldDifficulty;
+        board.difficultyDuration = 20;
+        board.songStartTime = Date.now();
+        board.previewStartOffset = Math.floor(Math.random() * 10);
+        board.category = oldCategory;
+
+        room.turnTimeLeft = 20;
+      } else {
+        const playerIds = room.players.map((p) => p.id);
+        const engine = getGameEngine(room.game);
+        room.gameState = engine.initializeGame(playerIds);
+        room.turnTimeLeft = 30;
+      }
 
       return { room, startRematch: true };
     }

@@ -334,11 +334,9 @@ export const socketHandler = (io: Server) => {
       } catch (err: any) {
         socket.emit('error', err.message);
       }
-    });
-
-    socket.on('play-again', () => {
+    });    socket.on('play-again', async () => {
       try {
-        const result = roomManager.restartGame(socket.id);
+        const result = await roomManager.restartGame(socket.id);
         const room = result.room;
         io.to(`room_${room.id}`).emit('room-updated', room);
         
@@ -351,6 +349,12 @@ export const socketHandler = (io: Server) => {
       }
     });
 
+    socket.on('curation-progress', ({ count }) => {
+      const room = roomManager.getRoomBySocket(socket.id);
+      if (room) {
+        socket.to(`room_${room.id}`).emit('opponent-curation-progress', { count });
+      }
+    });
     socket.on('chat-message', ({ message }) => {
       const room = roomManager.getRoomBySocket(socket.id);
       if (room) {

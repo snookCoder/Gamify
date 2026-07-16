@@ -107,7 +107,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     });
 
     socket.on('disconnect', () => {
-      set({ isConnected: false, socket: null, room: null });
+      set({ isConnected: false, room: null });
     });
 
     socket.on('public-rooms', (rooms: Room[]) => {

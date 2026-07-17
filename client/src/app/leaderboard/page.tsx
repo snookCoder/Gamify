@@ -8,6 +8,8 @@ import { Navbar } from '../../components/Navbar';
 import { Leaderboard } from '../../components/Leaderboard';
 import { BottomNav } from '../../components/BottomNav';
 
+import { Loader } from '../../components/ui/Loader';
+
 export default function LeaderboardPage() {
   const router = useRouter();
   const { user, isAuthenticated, token } = useAuthStore();
@@ -28,8 +30,9 @@ export default function LeaderboardPage() {
 
   if (!mounted || !isAuthenticated || !user) {
     return (
-      <div className="min-h-screen bg-[#090a0f] flex items-center justify-center text-gray-400">
-        Loading...
+      <div className="min-h-screen bg-[#06070a] flex items-center justify-center relative overflow-hidden select-none">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-violet-600/10 rounded-full filter blur-[120px] pointer-events-none" />
+        <Loader size="lg" />
       </div>
     );
   }

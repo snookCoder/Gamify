@@ -10,8 +10,10 @@ import { Chat } from '../../../components/Chat';
 import { GameContainer } from '../../../components/GameContainer';
 import { Avatar } from '../../../components/ui/Avatar';
 import { Button } from '../../../components/ui/Button';
+import { Loader } from '../../../components/ui/Loader';
 import { Shield, CheckCircle2, XCircle, Copy, LogOut, Gamepad2, MessageSquare, X, Lock, Link, Swords, Disc, Send, Music } from 'lucide-react';
 import { motion } from 'framer-motion';
+
 
 export default function RoomPage() {
   const params = useParams();
@@ -163,48 +165,9 @@ export default function RoomPage() {
   if (!room || !user) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center min-h-screen bg-[#06070a] relative overflow-hidden select-none">
-        {/* Ambient Glows */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-violet-600/10 rounded-full filter blur-[120px] pointer-events-none" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] bg-cyan-500/5 rounded-full filter blur-[80px] pointer-events-none" />
-
-        <div className="flex flex-col items-center z-10">
-          <div className="relative flex items-center justify-center w-24 h-24 mb-6">
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 3.5, repeat: Infinity, ease: "linear" }}
-              className="absolute inset-0 rounded-full border-2 border-dashed border-violet-500/40"
-            />
-            <motion.div
-              animate={{ scale: [1, 1.1, 1] }}
-              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-              className="absolute inset-2 rounded-full border-2 border-violet-500/20 shadow-[0_0_15px_rgba(139,92,246,0.15)]"
-            />
-            <motion.div
-              animate={{ scale: [0.95, 1.05, 0.95] }}
-              transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-              className="w-14 h-14 bg-gradient-to-br from-violet-600 to-indigo-500 rounded-2xl flex items-center justify-center border border-violet-400/20 shadow-lg shadow-violet-500/20"
-            >
-              <Gamepad2 className="w-7 h-7 text-white" />
-            </motion.div>
-          </div>
-
-          <motion.h1
-            initial={{ letterSpacing: "0.2em", opacity: 0.7 }}
-            animate={{ letterSpacing: "0.3em", opacity: 1 }}
-            transition={{ duration: 2, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
-            className="font-display font-black text-xl text-transparent bg-clip-text bg-gradient-to-r from-violet-400 via-white to-cyan-400 tracking-[0.25em] uppercase pl-[0.25em]"
-          >
-            PlayVerse
-          </motion.h1>
-
-          <motion.span
-            animate={{ opacity: [0.4, 0.8, 0.4] }}
-            transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-            className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.15em] mt-3 font-mono"
-          >
-            Syncing Arena Details...
-          </motion.span>
-        </div>
+        <Loader size="lg" text="Syncing Arena" />
       </div>
     );
   }

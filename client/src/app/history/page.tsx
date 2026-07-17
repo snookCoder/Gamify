@@ -9,6 +9,7 @@ import { Navbar } from '../../components/Navbar';
 import { Avatar } from '../../components/ui/Avatar';
 import { BottomNav } from '../../components/BottomNav';
 import { History } from 'lucide-react';
+import { Loader } from '../../components/ui/Loader';
 
 export default function HistoryPage() {
   const router = useRouter();
@@ -50,8 +51,9 @@ export default function HistoryPage() {
 
   if (!mounted || !isAuthenticated || !user) {
     return (
-      <div className="min-h-screen bg-[#090a0f] flex items-center justify-center text-gray-400">
-        Loading...
+      <div className="min-h-screen bg-[#06070a] flex items-center justify-center relative overflow-hidden select-none">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-violet-600/10 rounded-full filter blur-[120px] pointer-events-none" />
+        <Loader size="lg" />
       </div>
     );
   }
@@ -71,7 +73,7 @@ export default function HistoryPage() {
             </div>
 
             {loadingMatches ? (
-              <div className="text-sm text-gray-500 text-center py-10">Loading logs...</div>
+              <Loader size="sm" text="Loading logs" className="py-10" />
             ) : matches.length === 0 ? (
               <div className="text-sm text-gray-500 text-center py-10 border border-dashed border-white/5 rounded-xl bg-slate-900/10">
                 No matches played yet. Start a duel to populate history!

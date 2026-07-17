@@ -5,6 +5,8 @@ import { api } from '../services/api';
 import { Avatar } from './ui/Avatar';
 import { Trophy, Medal, RefreshCw } from 'lucide-react';
 import { useGameStore } from '../store/useGameStore';
+import { Loader } from './ui/Loader';
+
 
 interface LeaderboardUser {
   _id: string;
@@ -66,8 +68,8 @@ export const Leaderboard: React.FC = () => {
       </div>
 
       {loading && users.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center text-sm text-gray-500 py-10">
-          Loading ranks...
+        <div className="flex-1 flex items-center justify-center py-10">
+          <Loader size="sm" text="Loading ranks" />
         </div>
       ) : error ? (
         <div className="flex-1 flex items-center justify-center text-sm text-red-400 py-10">

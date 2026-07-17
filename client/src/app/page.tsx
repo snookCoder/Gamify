@@ -8,7 +8,8 @@ import { Navbar } from '../components/Navbar';
 import { BottomNav } from '../components/BottomNav';
 import { Avatar } from '../components/ui/Avatar';
 import { Button } from '../components/ui/Button';
-import { Award, ArrowRight, Gamepad2 } from 'lucide-react';
+import { Loader } from '../components/ui/Loader';
+import { Award, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function Dashboard() {
@@ -40,26 +41,7 @@ export default function Dashboard() {
     return (
       <div className="flex-1 flex flex-col items-center justify-center min-h-screen bg-[#06070a] relative overflow-hidden select-none">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-violet-600/10 rounded-full filter blur-[120px] pointer-events-none" />
-        <div className="flex flex-col items-center z-10">
-          <div className="relative flex items-center justify-center w-24 h-24 mb-6">
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 3.5, repeat: Infinity, ease: "linear" }}
-              className="absolute inset-0 rounded-full border-2 border-dashed border-violet-500/40"
-            />
-            <motion.div
-              animate={{ scale: [1, 1.1, 1] }}
-              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-              className="absolute inset-2 rounded-full border-2 border-violet-500/20 shadow-[0_0_15px_rgba(139,92,246,0.15)]"
-            />
-            <div className="w-14 h-14 bg-gradient-to-br from-violet-600 to-indigo-500 rounded-2xl flex items-center justify-center border border-violet-400/20 shadow-lg shadow-violet-500/20">
-              <Gamepad2 className="w-7 h-7 text-white" />
-            </div>
-          </div>
-          <h1 className="font-display font-black text-xl text-transparent bg-clip-text bg-gradient-to-r from-violet-400 via-white to-cyan-400 tracking-[0.25em] uppercase">
-            PlayVerse
-          </h1>
-        </div>
+        <Loader size="lg" />
       </div>
     );
   }
@@ -72,6 +54,7 @@ export default function Dashboard() {
   const progressPercent = Math.min(100, Math.round((xpInCurrentLevel / 50) * 100));
 
   const availableGames = [
+    { id: 'music-room', name: 'Music Party', emoji: '📻🎵', active: true, desc: 'Listen to synchronized music previews alone or in rooms with up to 5 friends!' },
     { id: 'tic-tac-toe', name: 'Tic-Tac-Toe', emoji: '❌⭕', active: true, desc: 'Align 3 symbols to conquer the board.' },
     { id: 'guess-the-song', name: 'Guess The Song', emoji: '🎵🎧', active: true, desc: 'Listen to short audio previews and guess the title as fast as possible!' },
     { id: 'chess', name: 'Chess', emoji: '👑♟️', active: false, desc: 'Classic board game of intellect. Coming soon!' },

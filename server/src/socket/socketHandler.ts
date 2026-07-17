@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { User } from '../models/User';
 import { roomManager } from './roomManager';
 import { PrivateMessage } from '../models/PrivateMessage';
+import { musicRoomManager } from './musicRoomManager';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'playverse-jwt-secret-key-123456';
 
@@ -685,6 +686,119 @@ export const socketHandler = (io: Server) => {
       });
     });
 
+    // --- Music Room Socket Event Listeners ---
+    socket.on('music-room:create', ({ roomName, maxParticipants, isPrivate }) => {
+      try {
+        const room = musicRoomManager.createRoom(
+          user._id.toString(),
+          user.username,
+          user.avatar,
+          user.rating,
+          socket.id,
+          roomName,
+          maxParticipants,
+          isPrivate
+        );
+        socket.join(`music_room_${room.id}`);
+        socket.emit('music-room:created', room);
+      } catch (err: any) {
+        socket.emit('error', err.message);
+      }
+    });
+
+    socket.on('music-room:join', ({ roomCode }) => {
+      try {
+        const room = musicRoomManager.joinRoom(
+          roomCode,
+          user._id.toString(),
+          user.username,
+          user.avatar,
+          user.rating,
+          socket.id
+        );
+        socket.join(`music_room_${room.id}`);
+        io.to(`music_room_${room.id}`).emit('music-room:updated', room);
+      } catch (err: any) {
+        socket.emit('error', err.message);
+      }
+    });
+
+    socket.on('music-room:leave', () => {
+      handleUserLeaving(io, socket);
+    });
+
+    socket.on('music-room:action', ({ action, progress, song }) => {
+      try {
+        const room = musicRoomManager.syncPlayback(
+          socket.id,
+          action,
+          progress,
+          song,
+          user.username
+        );
+        io.to(`music_room_${room.id}`).emit('music-room:updated', room);
+      } catch (err: any) {
+        socket.emit('error', err.message);
+      }
+    });
+
+    socket.on('music-room:queue-update', ({ actionType, data }) => {
+      try {
+        const room = musicRoomManager.updateQueue(
+          socket.id,
+          actionType,
+          data,
+          user.username
+        );
+        io.to(`music_room_${room.id}`).emit('music-room:updated', room);
+      } catch (err: any) {
+        socket.emit('error', err.message);
+      }
+    });
+
+    socket.on('music-room:chat-message', ({ message }) => {
+      try {
+        const room = musicRoomManager.addChatMessage(
+          socket.id,
+          message,
+          {
+            id: user._id.toString(),
+            username: user.username,
+            avatar: user.avatar
+          }
+        );
+        io.to(`music_room_${room.id}`).emit('music-room:updated', room);
+      } catch (err: any) {
+        socket.emit('error', err.message);
+      }
+    });
+
+    socket.on('music-room:transfer-host', ({ targetPlayerId }) => {
+      try {
+        const room = musicRoomManager.transferHost(
+          socket.id,
+          targetPlayerId,
+          user.username
+        );
+        io.to(`music_room_${room.id}`).emit('music-room:updated', room);
+      } catch (err: any) {
+        socket.emit('error', err.message);
+      }
+    });
+
+    socket.on('music-room:toggle-control', ({ allow }) => {
+      try {
+        const room = musicRoomManager.toggleEveryoneControl(
+          socket.id,
+          allow,
+          user.username
+        );
+        io.to(`music_room_${room.id}`).emit('music-room:updated', room);
+      } catch (err: any) {
+        socket.emit('error', err.message);
+      }
+    });
+
     socket.on('leave-room', () => {
       handleUserLeaving(io, socket);
     });
@@ -735,5 +849,15 @@ const handleUserLeaving = async (io: Server, socket: Socket) => {
       }
     }
     socket.broadcast.emit('public-rooms', roomManager.getPublicRooms());
+  }
+
+  // Handle music room leaving
+  const musicResult = musicRoomManager.leaveRoom(socket.id);
+  if (musicResult) {
+    const { roomCode, room, wasDeleted } = musicResult;
+    socket.leave(`music_room_${roomCode}`);
+    if (!wasDeleted && room) {
+      io.to(`music_room_${roomCode}`).emit('music-room:updated', room);
+    }
   }
 };

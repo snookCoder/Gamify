@@ -2,16 +2,13 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { useAuthStore } from '../store/useAuthStore';
 import { useGameStore } from '../store/useGameStore';
-import { api } from '../services/api';
 import { Navbar } from '../components/Navbar';
-import { Leaderboard } from '../components/Leaderboard';
 import { BottomNav } from '../components/BottomNav';
 import { Avatar } from '../components/ui/Avatar';
 import { Button } from '../components/ui/Button';
-import { Award, History, ArrowRight, Gamepad2, Trophy } from 'lucide-react';
+import { Award, ArrowRight, Gamepad2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function Dashboard() {
@@ -19,8 +16,6 @@ export default function Dashboard() {
   const { user, isAuthenticated, token } = useAuthStore();
   const { connectSocket, room } = useGameStore();
 
-  const [matches, setMatches] = useState<any[]>([]);
-  const [loadingMatches, setLoadingMatches] = useState(true);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -40,23 +35,6 @@ export default function Dashboard() {
       router.push(`/room/${room.id}`);
     }
   }, [room, router]);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      const fetchHistory = async () => {
-        try {
-          setLoadingMatches(true);
-          const data = await api.users.getMatchHistory();
-          setMatches(data as any);
-        } catch (err) {
-          console.error(err);
-        } finally {
-          setLoadingMatches(false);
-        }
-      };
-      fetchHistory();
-    }
-  }, [isAuthenticated]);
 
   if (!mounted || !isAuthenticated || !user) {
     return (
@@ -100,84 +78,6 @@ export default function Dashboard() {
     { id: 'connect4', name: 'Connect 4', emoji: '🔴🟡', active: false, desc: 'Drop tokens to connect 4 in a row. Coming soon!' },
   ];
 
-  const recentMatchesCard = (
-    <div className="glass-panel rounded-2xl p-4 md:p-6">
-      <div className="flex items-center justify-between mb-3 md:mb-5">
-        <div className="flex items-center gap-2">
-          <History className="w-4 h-4 md:w-5 md:h-5 text-gray-400" />
-          <h2 className="font-display font-bold text-base md:text-lg text-gray-100 tracking-wide uppercase">
-            RECENT MATCHES
-          </h2>
-        </div>
-        {matches.length > 2 && (
-          <Link href="/history" className="text-[10px] md:text-xs text-violet-400 hover:text-violet-300 font-bold hover:underline">
-            View All
-          </Link>
-        )}
-      </div>
-
-      {loadingMatches ? (
-        <div className="text-sm text-gray-500 text-center py-6">Loading logs...</div>
-      ) : matches.length === 0 ? (
-        <div className="text-sm text-gray-500 text-center py-6 border border-dashed border-white/5 rounded-xl bg-slate-900/10">
-          No matches played yet. Start a duel to populate history!
-        </div>
-      ) : (
-        <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-1">
-          {matches.slice(0, 2).map((match) => {
-            const opponent = match.players.find((p: any) => p._id !== user.id);
-            const isDraw = !match.winner;
-            const isWinner = match.winner?._id === user.id || match.winner === user.id;
-
-            const ringColor = isDraw
-              ? 'ring-2 ring-amber-500/30'
-              : isWinner
-                ? 'ring-2 ring-emerald-500/30'
-                : 'ring-2 ring-rose-500/30';
-
-            return (
-              <div
-                key={match._id}
-                className="flex items-center justify-between py-3.5 border-b border-white/5 last:border-b-0 hover:bg-white/[0.01] px-2 rounded-lg transition-all"
-              >
-                <div className="flex items-center gap-3">
-                  <Avatar name={opponent?.avatar || 'avatar_1'} size="sm" className={`ring-offset-2 ring-offset-slate-950 ${ringColor}`} />
-                  <div>
-                    <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider flex items-center gap-1.5">
-                      <span className="font-display text-violet-400 font-bold">
-                        {match.game === 'tic-tac-toe' ? '❌⭕ Tic-Tac-Toe' : match.game === 'guess-the-song' ? '🎵 Guess Song' : match.game}
-                      </span>
-                      <span className="text-gray-700">•</span>
-                      <span className="font-mono text-gray-500 font-normal">
-                        {new Date(match.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                      </span>
-                    </div>
-                    <div className="text-sm font-bold text-gray-200 mt-0.5">
-                      vs {opponent?.username || 'Opponent'}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <span
-                    className={`text-[9px] md:text-[10px] font-display font-black tracking-widest uppercase px-2.5 py-1 rounded border font-mono shadow-md ${isDraw
-                        ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
-                        : isWinner
-                          ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                          : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
-                      }`}
-                  >
-                    {isDraw ? 'Draw' : isWinner ? 'Victory' : 'Defeat'}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-
   return (
     <div className="flex flex-col min-h-screen bg-[#090a0f] cyber-grid relative font-sans">
       <Navbar />
@@ -218,102 +118,90 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 items-start">
-          <div className="space-y-4 md:space-y-6 lg:col-span-2">
-            <div className="glass-panel rounded-2xl p-3.5 grid grid-cols-4 gap-1 text-center divide-x divide-white/5 shadow-lg select-none">
-              <div className="px-1">
-                <div className="text-[9px] md:text-xs font-semibold text-gray-400 uppercase tracking-wider">Rating</div>
-                <div className="text-base md:text-xl font-black text-violet-400 mt-0.5 font-mono">{user.rating}</div>
-              </div>
-              <div className="px-1">
-                <div className="text-[9px] md:text-xs font-semibold text-gray-400 uppercase tracking-wider">Win Rate</div>
-                <div className="text-base md:text-xl font-black text-cyan-400 mt-0.5 font-mono">{winRate}%</div>
-              </div>
-              <div className="px-1">
-                <div className="text-[9px] md:text-xs font-semibold text-gray-400 uppercase tracking-wider">Matches</div>
-                <div className="text-base md:text-xl font-black text-amber-500 mt-0.5 font-mono">{totalGames}</div>
-              </div>
-              <div className="px-1">
-                <div className="text-[9px] md:text-xs font-semibold text-gray-400 uppercase tracking-wider">Wins</div>
-                <div className="text-base md:text-xl font-black text-emerald-400 mt-0.5 font-mono">{user.wins}</div>
-              </div>
+        <div className="max-w-4xl mx-auto w-full space-y-4 md:space-y-6">
+          <div className="glass-panel rounded-2xl p-3.5 grid grid-cols-4 gap-1 text-center divide-x divide-white/5 shadow-lg select-none">
+            <div className="px-1">
+              <div className="text-[9px] md:text-xs font-semibold text-gray-400 uppercase tracking-wider">Rating</div>
+              <div className="text-base md:text-xl font-black text-violet-400 mt-0.5 font-mono">{user.rating}</div>
             </div>
-
-            {/* Android APK Download Banner (Desktop only) */}
-            <div className="hidden md:flex glass-panel rounded-2xl p-3.5 md:p-5 bg-gradient-to-r from-violet-950/20 to-slate-950/30 border border-violet-500/20 flex flex-row items-center justify-between gap-4 hover-glow-purple card-transition">
-              <div className="flex items-center gap-3 text-left">
-                <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-violet-600/10 border border-violet-500/30 flex items-center justify-center text-violet-400 text-lg md:text-xl shrink-0">
-                  📱
-                </div>
-                <div>
-                  <h3 className="font-display font-bold text-sm md:text-base text-gray-200">PlayVerse Mobile</h3>
-                  <p className="text-xs text-gray-400 mt-1 leading-relaxed max-w-md hidden sm:block">
-                    Download and install our mobile APK to enjoy full-screen gaming, smoother performance, and a native app experience on your phone.
-                  </p>
-                </div>
-              </div>
-              <a
-                href="/playverse.apk"
-                download="playverse.apk"
-                className="shrink-0"
-              >
-                <Button variant="primary" className="gap-1.5 py-1.5 px-4 md:py-2.5 md:px-6 text-xs md:text-sm font-bold cursor-pointer whitespace-nowrap">
-                  Download
-                </Button>
-              </a>
+            <div className="px-1">
+              <div className="text-[9px] md:text-xs font-semibold text-gray-400 uppercase tracking-wider">Win Rate</div>
+              <div className="text-base md:text-xl font-black text-cyan-400 mt-0.5 font-mono">{winRate}%</div>
             </div>
-
-            <div className="glass-panel rounded-2xl p-4 md:p-6">
-              <h2 className="font-display font-bold text-base md:text-lg text-gray-100 mb-3 md:mb-5 tracking-wide uppercase">
-                AVAILABLE GAMES
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {availableGames.map((game) => (
-                  <div
-                    key={game.id}
-                    className={`relative p-4 md:p-5 rounded-2xl border border-white/5 bg-slate-900/20 card-transition ${game.active
-                        ? 'hover:bg-slate-900/60 hover:border-violet-500/30 hover-glow-purple'
-                        : 'opacity-50'
-                      }`}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-2xl">{game.emoji}</span>
-                      {game.active ? (
-                        <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                          Active
-                        </span>
-                      ) : (
-                        <span className="bg-slate-800 text-gray-400 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                          Soon
-                        </span>
-                      )}
-                    </div>
-                    <h3 className="font-display font-bold text-base text-gray-200">{game.name}</h3>
-                    <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">{game.desc}</p>
-                    {game.active && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="mt-3 md:mt-4 p-0 text-xs md:text-sm text-violet-400 hover:text-violet-300 font-bold items-center gap-1 hover:bg-transparent cursor-pointer"
-                        onClick={() => router.push(`/games/${game.id}`)}
-                      >
-                        Launch Duel <ArrowRight className="w-3.5 h-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
+            <div className="px-1">
+              <div className="text-[9px] md:text-xs font-semibold text-gray-400 uppercase tracking-wider">Matches</div>
+              <div className="text-base md:text-xl font-black text-amber-500 mt-0.5 font-mono">{totalGames}</div>
             </div>
-
-            {/* Desktop and Mobile Recent Matches (Limited to 2 matches on home page) */}
-            <div>
-              {recentMatchesCard}
+            <div className="px-1">
+              <div className="text-[9px] md:text-xs font-semibold text-gray-400 uppercase tracking-wider">Wins</div>
+              <div className="text-base md:text-xl font-black text-emerald-400 mt-0.5 font-mono">{user.wins}</div>
             </div>
           </div>
 
-          {/* Desktop Leaderboard */}
-          <div className="hidden lg:block space-y-4 md:space-y-6">
-            <Leaderboard />
+          {/* Android APK Download Banner (Desktop only) */}
+          <div className="hidden md:flex glass-panel rounded-2xl p-3.5 md:p-5 bg-gradient-to-r from-violet-950/20 to-slate-950/30 border border-violet-500/20 flex flex-row items-center justify-between gap-4 hover-glow-purple card-transition">
+            <div className="flex items-center gap-3 text-left">
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-violet-600/10 border border-violet-500/30 flex items-center justify-center text-violet-400 text-lg md:text-xl shrink-0">
+                📱
+              </div>
+              <div>
+                <h3 className="font-display font-bold text-sm md:text-base text-gray-200">PlayVerse Mobile</h3>
+                <p className="text-xs text-gray-400 mt-1 leading-relaxed max-w-md hidden sm:block">
+                  Download and install our mobile APK to enjoy full-screen gaming, smoother performance, and a native app experience on your phone.
+                </p>
+              </div>
+            </div>
+            <a
+              href="/playverse.apk"
+              download="playverse.apk"
+              className="shrink-0"
+            >
+              <Button variant="primary" className="gap-1.5 py-1.5 px-4 md:py-2.5 md:px-6 text-xs md:text-sm font-bold cursor-pointer whitespace-nowrap">
+                Download
+              </Button>
+            </a>
+          </div>
+
+          <div className="glass-panel rounded-2xl p-4 md:p-6">
+            <h2 className="font-display font-bold text-base md:text-lg text-gray-100 mb-3 md:mb-5 tracking-wide uppercase">
+              AVAILABLE GAMES
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {availableGames.map((game) => (
+                <div
+                  key={game.id}
+                  className={`relative p-4 md:p-5 rounded-2xl border border-white/5 bg-slate-900/20 card-transition ${game.active
+                      ? 'hover:bg-slate-900/60 hover:border-violet-500/30 hover-glow-purple'
+                      : 'opacity-50'
+                    }`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-2xl">{game.emoji}</span>
+                    {game.active ? (
+                      <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        Active
+                      </span>
+                    ) : (
+                      <span className="bg-slate-800 text-gray-400 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        Soon
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="font-display font-bold text-base text-gray-200">{game.name}</h3>
+                  <p className="text-xs text-gray-550 mt-1.5 leading-relaxed">{game.desc}</p>
+                  {game.active && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="mt-3 md:mt-4 p-0 text-xs md:text-sm text-violet-400 hover:text-violet-300 font-bold items-center gap-1 hover:bg-transparent cursor-pointer"
+                      onClick={() => router.push(`/games/${game.id}`)}
+                    >
+                      Launch Duel <ArrowRight className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </main>

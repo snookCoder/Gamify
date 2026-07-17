@@ -424,7 +424,7 @@ export default function RoomPage() {
                                   INVITE ONLINE CHALLENGERS
                                 </h3>
                                 
-                                <div className="space-y-1.5 max-h-[70px] sm:max-h-[180px] overflow-y-auto pr-1 scrollbar-thin">
+                                <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1 scrollbar-thin">
                                   {availableInvitees.map((onlineUser) => {
                                     const isInvited = !!invitedUserIds[onlineUser._id];
                                     return (

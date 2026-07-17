@@ -2,6 +2,7 @@ import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User';
 import { roomManager } from './roomManager';
+import { PrivateMessage } from '../models/PrivateMessage';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'playverse-jwt-secret-key-123456';
 
@@ -417,6 +418,271 @@ export const socketHandler = (io: Server) => {
       } catch (err: any) {
         socket.emit('error', err.message);
       }
+    });
+
+    // Friend Requests & Actions
+    socket.on('send-friend-request', async ({ targetUserId }) => {
+      try {
+        const currentUser = await User.findById(user._id);
+        const targetUser = await User.findById(targetUserId);
+
+        if (!currentUser || !targetUser) {
+          socket.emit('error', 'User not found');
+          return;
+        }
+
+        const currentIdStr = currentUser._id.toString();
+        const targetIdStr = targetUser._id.toString();
+
+        // Check if already friends or request already exists
+        const isFriend = currentUser.friends.some(id => id.toString() === targetIdStr);
+        const requestSent = currentUser.friendRequestsSent.some(id => id.toString() === targetIdStr);
+        const requestReceived = currentUser.friendRequestsReceived.some(id => id.toString() === targetIdStr);
+
+        if (isFriend || requestSent || requestReceived) {
+          socket.emit('error', 'Friend request status already active');
+          return;
+        }
+
+        currentUser.friendRequestsSent.push(targetUser._id as any);
+        targetUser.friendRequestsReceived.push(currentUser._id as any);
+
+        await currentUser.save();
+        await targetUser.save();
+
+        // Broadcast friend-updated to all sockets of both users
+        const affectedUserIds = [currentIdStr, targetIdStr];
+        Array.from(io.sockets.sockets.values()).forEach((s) => {
+          if (s.data.user?._id && affectedUserIds.includes(s.data.user._id.toString())) {
+            s.emit('friend-updated');
+          }
+        });
+      } catch (err: any) {
+        socket.emit('error', 'Failed to send friend request');
+      }
+    });
+
+    socket.on('accept-friend-request', async ({ targetUserId }) => {
+      try {
+        const currentUser = await User.findById(user._id);
+        const targetUser = await User.findById(targetUserId);
+
+        if (!currentUser || !targetUser) {
+          socket.emit('error', 'User not found');
+          return;
+        }
+
+        const currentIdStr = currentUser._id.toString();
+        const targetIdStr = targetUser._id.toString();
+
+        // Remove from pending lists
+        currentUser.friendRequestsReceived = currentUser.friendRequestsReceived.filter(
+          id => id.toString() !== targetIdStr
+        );
+        targetUser.friendRequestsSent = targetUser.friendRequestsSent.filter(
+          id => id.toString() !== currentIdStr
+        );
+
+        // Add to friends lists (if not already there)
+        if (!currentUser.friends.some(id => id.toString() === targetIdStr)) {
+          currentUser.friends.push(targetUser._id as any);
+        }
+        if (!targetUser.friends.some(id => id.toString() === currentIdStr)) {
+          targetUser.friends.push(currentUser._id as any);
+        }
+
+        await currentUser.save();
+        await targetUser.save();
+
+        // Broadcast friend-updated to all sockets of both users
+        const affectedUserIds = [currentIdStr, targetIdStr];
+        Array.from(io.sockets.sockets.values()).forEach((s) => {
+          if (s.data.user?._id && affectedUserIds.includes(s.data.user._id.toString())) {
+            s.emit('friend-updated');
+          }
+        });
+      } catch (err: any) {
+        socket.emit('error', 'Failed to accept friend request');
+      }
+    });
+
+    socket.on('decline-friend-request', async ({ targetUserId }) => {
+      try {
+        const currentUser = await User.findById(user._id);
+        const targetUser = await User.findById(targetUserId);
+
+        if (!currentUser || !targetUser) {
+          socket.emit('error', 'User not found');
+          return;
+        }
+
+        const currentIdStr = currentUser._id.toString();
+        const targetIdStr = targetUser._id.toString();
+
+        // Remove from all pending request lists (covers both decline and cancel actions)
+        currentUser.friendRequestsReceived = currentUser.friendRequestsReceived.filter(
+          id => id.toString() !== targetIdStr
+        );
+        currentUser.friendRequestsSent = currentUser.friendRequestsSent.filter(
+          id => id.toString() !== targetIdStr
+        );
+        targetUser.friendRequestsReceived = targetUser.friendRequestsReceived.filter(
+          id => id.toString() !== currentIdStr
+        );
+        targetUser.friendRequestsSent = targetUser.friendRequestsSent.filter(
+          id => id.toString() !== currentIdStr
+        );
+
+        await currentUser.save();
+        await targetUser.save();
+
+        // Broadcast friend-updated to all sockets of both users
+        const affectedUserIds = [currentIdStr, targetIdStr];
+        Array.from(io.sockets.sockets.values()).forEach((s) => {
+          if (s.data.user?._id && affectedUserIds.includes(s.data.user._id.toString())) {
+            s.emit('friend-updated');
+          }
+        });
+      } catch (err: any) {
+        socket.emit('error', 'Failed to update friend request');
+      }
+    });
+
+    // Private message handling
+    socket.on('send-private-msg', async ({ toUserId, message, type, mediaUrl, duration }) => {
+      try {
+        // Enforce friendship validation
+        const dbUser = await User.findById(user._id).select('friends').lean();
+        const friendsList = (dbUser?.friends || []).map(id => id.toString());
+        if (!friendsList.includes(toUserId)) {
+          socket.emit('error', 'You can only message accepted friends.');
+          return;
+        }
+
+        // Save to MongoDB
+        const dbMsg = await PrivateMessage.create({
+          senderId: user._id,
+          recipientId: toUserId,
+          message,
+          type: type || 'text',
+          mediaUrl,
+          duration,
+          isRead: false
+        });
+
+        const recipientSockets = Array.from(io.sockets.sockets.values()).filter(
+          (s) => s.data.user?._id.toString() === toUserId
+        );
+
+        const msgPayload = {
+          id: dbMsg._id.toString(),
+          fromUserId: user._id.toString(),
+          fromUsername: user.username,
+          fromAvatar: user.avatar,
+          toUserId,
+          message,
+          type: type || 'text',
+          mediaUrl,
+          duration,
+          timestamp: dbMsg.createdAt.toISOString()
+        };
+
+        recipientSockets.forEach((s) => {
+          s.emit('private-msg', msgPayload);
+        });
+
+        // Also emit back to the sender in case they have other sockets/tabs open
+        const senderSockets = Array.from(io.sockets.sockets.values()).filter(
+          (s) => s.data.user?._id.toString() === user._id.toString() && s.id !== socket.id
+        );
+        senderSockets.forEach((s) => {
+          s.emit('private-msg', msgPayload);
+        });
+      } catch (err: any) {
+        socket.emit('error', 'Failed to send private message');
+      }
+    });
+
+    // Private typing status
+    socket.on('send-private-typing', ({ toUserId, isTyping }) => {
+      const recipientSockets = Array.from(io.sockets.sockets.values()).filter(
+        (s) => s.data.user?._id.toString() === toUserId
+      );
+      recipientSockets.forEach((s) => {
+        s.emit('private-typing', {
+          fromUserId: user._id.toString(),
+          isTyping
+        });
+      });
+    });
+
+    // Call signaling (WebRTC / Mock call states)
+    socket.on('call-user', async ({ toUserId, offer }) => {
+      // Enforce friendship validation for calls
+      const dbUser = await User.findById(user._id).select('friends').lean();
+      const friendsList = (dbUser?.friends || []).map(id => id.toString());
+      if (!friendsList.includes(toUserId)) {
+        socket.emit('error', 'You can only call accepted friends.');
+        return;
+      }
+
+      const recipientSockets = Array.from(io.sockets.sockets.values()).filter(
+        (s) => s.data.user?._id.toString() === toUserId
+      );
+      recipientSockets.forEach((s) => {
+        s.emit('incoming-call', {
+          fromUserId: user._id.toString(),
+          fromUsername: user.username,
+          fromAvatar: user.avatar,
+          offer
+        });
+      });
+    });
+
+    socket.on('answer-call', ({ toUserId, answer }) => {
+      const recipientSockets = Array.from(io.sockets.sockets.values()).filter(
+        (s) => s.data.user?._id.toString() === toUserId
+      );
+      recipientSockets.forEach((s) => {
+        s.emit('call-accepted', {
+          fromUserId: user._id.toString(),
+          answer
+        });
+      });
+    });
+
+    socket.on('ice-candidate', ({ toUserId, candidate }) => {
+      const recipientSockets = Array.from(io.sockets.sockets.values()).filter(
+        (s) => s.data.user?._id.toString() === toUserId
+      );
+      recipientSockets.forEach((s) => {
+        s.emit('ice-candidate', {
+          fromUserId: user._id.toString(),
+          candidate
+        });
+      });
+    });
+
+    socket.on('hangup-call', ({ toUserId }) => {
+      const recipientSockets = Array.from(io.sockets.sockets.values()).filter(
+        (s) => s.data.user?._id.toString() === toUserId
+      );
+      recipientSockets.forEach((s) => {
+        s.emit('call-hungup', {
+          fromUserId: user._id.toString()
+        });
+      });
+    });
+
+    socket.on('reject-call', ({ toUserId }) => {
+      const recipientSockets = Array.from(io.sockets.sockets.values()).filter(
+        (s) => s.data.user?._id.toString() === toUserId
+      );
+      recipientSockets.forEach((s) => {
+        s.emit('call-rejected', {
+          fromUserId: user._id.toString()
+        });
+      });
     });
 
     socket.on('leave-room', () => {

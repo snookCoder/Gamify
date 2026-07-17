@@ -13,6 +13,9 @@ export interface IUser extends Document {
   level: number;
   coins: number;
   status: 'online' | 'offline';
+  friends: Schema.Types.ObjectId[];
+  friendRequestsSent: Schema.Types.ObjectId[];
+  friendRequestsReceived: Schema.Types.ObjectId[];
   comparePassword(password: string): Promise<boolean>;
   createdAt: Date;
   updatedAt: Date;
@@ -72,6 +75,18 @@ const userSchema = new Schema<IUser>(
       type: String,
       enum: ['online', 'offline'],
       default: 'offline',
+    },
+    friends: {
+      type: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+      default: [],
+    },
+    friendRequestsSent: {
+      type: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+      default: [],
+    },
+    friendRequestsReceived: {
+      type: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+      default: [],
     },
   },
   {

@@ -79,6 +79,10 @@ interface GameStoreState {
   acceptInvite: (onAccepted?: (roomCode: string) => void) => void;
   clearError: () => void;
   refreshLobby: () => void;
+  unreadPrivateCount: number;
+  activeChatPartnerId: string | null;
+  setUnreadPrivateCount: (count: number) => void;
+  setActiveChatPartnerId: (id: string | null) => void;
 }
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
@@ -93,6 +97,10 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   error: null,
   onlineUsers: [],
   activeInvite: null,
+  unreadPrivateCount: 0,
+  activeChatPartnerId: null,
+  setUnreadPrivateCount: (count) => set({ unreadPrivateCount: count }),
+  setActiveChatPartnerId: (id) => set({ activeChatPartnerId: id }),
 
   connectSocket: (token, onRoomCreated, onRoomJoined) => {
     if (get().socket) return;
@@ -172,6 +180,14 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
     socket.on('error', (errMsg: string) => {
       set({ error: errMsg });
+    });
+
+    socket.on('private-msg', (msg: any) => {
+      const activePartner = get().activeChatPartnerId;
+      const currentUserId = useAuthStore.getState().user?.id;
+      if (msg.fromUserId !== currentUserId && msg.fromUserId !== activePartner) {
+        set((state) => ({ unreadPrivateCount: state.unreadPrivateCount + 1 }));
+      }
     });
 
     set({ socket });

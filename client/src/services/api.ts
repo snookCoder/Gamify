@@ -41,5 +41,10 @@ export const api = {
       const countryParam = country ? `&country=${country}` : '';
       return request<any>(`/music/search?term=${encodeURIComponent(term)}${countryParam}`, { method: 'GET' });
     }
+  },
+  chats: {
+    getConversations: () => request<any[]>('/chats/conversations', { method: 'GET' }),
+    getHistory: (partnerId: string) => request<any[]>(`/chats/history/${partnerId}`, { method: 'GET' }),
+    markAsRead: (partnerId: string) => request<any>(`/chats/read/${partnerId}`, { method: 'PUT' }),
   }
 };

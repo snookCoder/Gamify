@@ -288,18 +288,10 @@ export const useMusicStore = create<MusicStoreState>((set, get) => {
     fetchPlaylists: async () => {
       set({ isLoadingLists: true });
       try {
-        const playlists = await api.music.search('', '') as any; // Not used directly, custom fetches
-        // Since api helper in api.ts doesn't expose custom routes directly, we fetch via standard fetch with token
-        const token = useAuthStore.getState().token;
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/music/playlists`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const list = await res.json();
-          set({ playlists: list });
-        }
-      } catch (err) {
-        console.error(err);
+        const list = await api.music.getPlaylists();
+        set({ playlists: list || [] });
+      } catch (err: any) {
+        console.error('Fetch playlists failed:', err.message);
       } finally {
         set({ isLoadingLists: false });
       }
@@ -307,209 +299,132 @@ export const useMusicStore = create<MusicStoreState>((set, get) => {
 
     createPlaylist: async (name) => {
       try {
-        const token = useAuthStore.getState().token;
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/music/playlists`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({ name })
-        });
-        if (res.ok) {
-          await get().fetchPlaylists();
-          get().addToast(`Playlist "${name}" created!`, 'success');
-        } else {
-          const data = await res.json();
-          get().addToast(data.error || 'Failed to create playlist', 'error');
-        }
+        await api.music.createPlaylist(name);
+        await get().fetchPlaylists();
+        get().addToast(`Playlist "${name}" created!`, 'success');
       } catch (err: any) {
-        get().addToast(err.message, 'error');
+        get().addToast('Create playlist failed: ' + err.message, 'error');
       }
     },
 
     renamePlaylist: async (id, name) => {
       try {
-        const token = useAuthStore.getState().token;
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/music/playlists/${id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({ name })
-        });
-        if (res.ok) {
-          await get().fetchPlaylists();
-          get().addToast(`Playlist renamed to "${name}"`, 'success');
-        }
+        await api.music.renamePlaylist(id, name);
+        await get().fetchPlaylists();
+        get().addToast(`Playlist renamed to "${name}"`, 'success');
       } catch (err: any) {
-        get().addToast(err.message, 'error');
+        get().addToast('Rename failed: ' + err.message, 'error');
       }
     },
 
     deletePlaylist: async (id) => {
       try {
-        const token = useAuthStore.getState().token;
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/music/playlists/${id}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (res.ok) {
-          await get().fetchPlaylists();
-          get().addToast('Playlist deleted', 'info');
-        }
+        await api.music.deletePlaylist(id);
+        await get().fetchPlaylists();
+        get().addToast('Playlist deleted', 'info');
       } catch (err: any) {
-        get().addToast(err.message, 'error');
+        get().addToast('Delete failed: ' + err.message, 'error');
       }
     },
 
     addSongToPlaylist: async (playlistId, song) => {
       try {
-        const token = useAuthStore.getState().token;
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/music/playlists/${playlistId}/songs`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify(song)
-        });
-        if (res.ok) {
-          await get().fetchPlaylists();
-          get().addToast(`Added "${song.title}" to playlist`, 'success');
-        } else {
-          const data = await res.json();
-          get().addToast(data.error || 'Failed to add song', 'error');
-        }
+        await api.music.addSongToPlaylist(playlistId, song);
+        await get().fetchPlaylists();
+        get().addToast(`Added "${song.title}" to playlist`, 'success');
       } catch (err: any) {
-        get().addToast(err.message, 'error');
+        get().addToast('Add song failed: ' + err.message, 'error');
       }
     },
 
     removeSongFromPlaylist: async (playlistId, songId) => {
       try {
-        const token = useAuthStore.getState().token;
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/music/playlists/${playlistId}/songs/${songId}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (res.ok) {
-          await get().fetchPlaylists();
-          get().addToast('Removed song from playlist', 'info');
-        }
+        await api.music.removeSongFromPlaylist(playlistId, songId);
+        await get().fetchPlaylists();
+        get().addToast('Removed song from playlist', 'info');
       } catch (err: any) {
-        get().addToast(err.message, 'error');
+        get().addToast('Remove failed: ' + err.message, 'error');
       }
     },
 
     reorderPlaylistSongs: async (playlistId, songs) => {
       try {
-        const token = useAuthStore.getState().token;
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/music/playlists/${playlistId}/songs/reorder`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({ songs })
-        });
-        if (res.ok) {
-          await get().fetchPlaylists();
-        }
-      } catch (err) {
-        console.error(err);
+        await api.music.reorderPlaylistSongs(playlistId, songs);
+        await get().fetchPlaylists();
+      } catch (err: any) {
+        console.error('Reorder playlist failed:', err.message);
       }
     },
 
     fetchFavorites: async () => {
       try {
-        const token = useAuthStore.getState().token;
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/music/favorites`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const favs = await res.json();
-          set({ favorites: favs });
-        }
-      } catch (err) {
-        console.error(err);
+        const favs = await api.music.getFavorites();
+        set({ favorites: favs || [] });
+      } catch (err: any) {
+        console.error('Fetch favorites failed:', err.message);
       }
     },
 
     toggleFavorite: async (song) => {
       const { favorites } = get();
       const isFav = favorites.some((f) => f.id === song.id);
-      const token = useAuthStore.getState().token;
 
       try {
         if (isFav) {
-          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/music/favorites/${song.id}`, {
-            method: 'DELETE',
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          if (res.ok) {
-            set({ favorites: favorites.filter((f) => f.id !== song.id) });
-            get().addToast('Removed from Liked Songs', 'info');
-          }
+          await api.music.removeFavorite(song.id);
+          set({ favorites: favorites.filter((f) => f.id !== song.id) });
+          get().addToast('Removed from Liked Songs', 'info');
         } else {
-          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/music/favorites`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`
-            },
-            body: JSON.stringify(song)
-          });
-          if (res.ok) {
-            set({ favorites: [...favorites, song] });
-            get().addToast('Added to Liked Songs', 'success');
-          }
+          await api.music.addFavorite(song);
+          set({ favorites: [...favorites, song] });
+          get().addToast('Added to Liked Songs', 'success');
         }
-      } catch (err) {
-        console.error(err);
+      } catch (err: any) {
+        get().addToast('Like operation failed: ' + err.message, 'error');
       }
     },
 
     fetchHistory: async () => {
       try {
-        const token = useAuthStore.getState().token;
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/music/history`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          set({ recentHistory: data.recent || [], mostPlayed: data.mostPlayed || [] });
-        }
-      } catch (err) {
-        console.error(err);
+        const data = await api.music.getHistory() as any;
+        set({ recentHistory: data.recent || [], mostPlayed: data.mostPlayed || [] });
+      } catch (err: any) {
+        console.error('Fetch history failed:', err.message);
       }
     },
 
     recordHistory: async (song) => {
       try {
-        const token = useAuthStore.getState().token;
-        await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/music/history`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify(song)
-        });
+        await api.music.recordHistory(song);
         get().fetchHistory();
-      } catch (err) {
-        console.error(err);
+      } catch (err: any) {
+        console.error('Record history failed:', err.message);
       }
     },
 
     fetchTrendingSongs: async () => {
       try {
-        const res = await fetch(`https://saavn.sumit.co/api/search/songs?query=Bollywood%20Hits`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && data.data && data.data.results) {
-            const songs = data.data.results.map((song: any) => {
+        const queries = [
+          'Bollywood Hits',
+          'Hindi Romantic',
+          'KK Songs',
+          'Arijit Hits',
+          'Atif Aslam Hits',
+          'Pritam Hits',
+          'Punjabi Hits'
+        ];
+        const resultsPromises = queries.map(q => 
+          fetch(`https://saavn.sumit.co/api/search/songs?query=${encodeURIComponent(q)}`)
+            .then(res => res.ok ? res.json() : { success: false })
+            .catch(() => ({ success: false }))
+        );
+        
+        const responses = await Promise.all(resultsPromises);
+        let allSongs: any[] = [];
+        
+        for (const json of responses) {
+          if (json.success && json.data && json.data.results) {
+            const mapped = json.data.results.map((song: any) => {
               const downloadUrls = song.downloadUrl || [];
               const bestAudio = downloadUrls[downloadUrls.length - 1] || downloadUrls.find((d: any) => d.quality === '160kbps') || {};
               const artistsList = song.artists && song.artists.primary 
@@ -528,9 +443,28 @@ export const useMusicStore = create<MusicStoreState>((set, get) => {
                 artworkUrl100: artworkUrl
               };
             });
-            set({ trendingSongs: songs.slice(0, 20) });
+            allSongs = [...allSongs, ...mapped];
           }
         }
+        
+        // Remove duplicates by title + artist combination (to catch different album versions of the same song)
+        const seen = new Set();
+        const uniqueSongs = [];
+        for (const song of allSongs) {
+          const normalizedTitle = song.title.toLowerCase().replace(/\(.*\)/, '').trim();
+          const normalizedArtist = song.artist.toLowerCase().split(',')[0].trim();
+          const key = `${normalizedTitle} - ${normalizedArtist}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            uniqueSongs.push(song);
+          }
+        }
+        
+        // Shuffle randomly
+        const shuffled = uniqueSongs.sort(() => Math.random() - 0.5);
+        
+        // Slice top 100 tracks
+        set({ trendingSongs: shuffled.slice(0, 100) });
       } catch (err) {
         console.error('Failed to fetch trending songs:', err);
       }

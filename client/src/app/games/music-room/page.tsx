@@ -49,7 +49,8 @@ function MusicRoomPageContent() {
     toggleFavorite,
     togglePlay,
     nextSong,
-    setIsPlayerExpanded
+    setIsPlayerExpanded,
+    leaveRoom
   } = useMusicStore();
 
   const [mounted, setMounted] = useState(false);
@@ -66,6 +67,16 @@ function MusicRoomPageContent() {
 
   useEffect(() => {
     setMounted(true);
+    return () => {
+      const { isRoomMode, leaveRoom, stop } = useMusicStore.getState();
+      if (isRoomMode) {
+        console.log('User navigated away from music-room, leaving room...');
+        leaveRoom();
+      } else {
+        console.log('User navigated away from music-room, stopping solo playback...');
+        stop();
+      }
+    };
   }, []);
 
   // Load playlists on mount
@@ -220,11 +231,19 @@ function MusicRoomPageContent() {
               </div>
             </div>
             
-            <div className="flex items-center gap-2 font-mono text-[10px]">
-              <span className="text-gray-550 hidden xs:inline font-bold uppercase">Code:</span>
-              <span className="bg-slate-950 border border-white/5 text-purple-400 font-black px-2.5 py-1 rounded-lg tracking-widest text-xs">
-                {room.id}
-              </span>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 font-mono text-[10px]">
+                <span className="text-gray-550 hidden xs:inline font-bold uppercase">Code:</span>
+                <span className="bg-slate-950 border border-white/5 text-purple-400 font-black px-2.5 py-1 rounded-lg tracking-widest text-xs select-all">
+                  {room.id}
+                </span>
+              </div>
+              <button
+                onClick={leaveRoom}
+                className="bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/20 hover:border-rose-500/30 text-rose-450 hover:text-rose-350 px-3 py-1.5 rounded-xl text-[10px] font-black tracking-wide transition-all cursor-pointer shrink-0 uppercase shadow-md active:scale-95"
+              >
+                Leave
+              </button>
             </div>
           </div>
         )}

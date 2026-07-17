@@ -52,6 +52,22 @@ export const useAuthStore = create<AuthState>((set) => {
         localStorage.removeItem('pv_token');
         localStorage.removeItem('pv_user');
       }
+      
+      // Stop music playback on logout
+      try {
+        const { useMusicStore } = require('./useMusicStore');
+        const musicState = useMusicStore.getState();
+        if (musicState) {
+          if (musicState.audio) {
+            musicState.audio.pause();
+            musicState.audio.src = '';
+          }
+          musicState.stop();
+        }
+      } catch (e) {
+        console.warn('Could not stop music store:', e);
+      }
+
       set({ user: null, token: null, isAuthenticated: false });
     },
     updateUser: (updates) => {

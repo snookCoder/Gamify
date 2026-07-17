@@ -75,7 +75,19 @@ export const api = {
     search: (term: string, country?: string) => {
       const countryParam = country ? `&country=${country}` : '';
       return request<any>(`/music/search?term=${encodeURIComponent(term)}${countryParam}`, { method: 'GET', skipLoader: true });
-    }
+    },
+    getPlaylists: () => request<any[]>('/music/playlists', { method: 'GET' }),
+    createPlaylist: (name: string) => request<any>('/music/playlists', { method: 'POST', body: JSON.stringify({ name }) }),
+    renamePlaylist: (id: string, name: string) => request<any>(`/music/playlists/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
+    deletePlaylist: (id: string) => request<any>(`/music/playlists/${id}`, { method: 'DELETE' }),
+    addSongToPlaylist: (playlistId: string, song: any) => request<any>(`/music/playlists/${playlistId}/songs`, { method: 'POST', body: JSON.stringify(song) }),
+    removeSongFromPlaylist: (playlistId: string, songId: string) => request<any>(`/music/playlists/${playlistId}/songs/${songId}`, { method: 'DELETE' }),
+    reorderPlaylistSongs: (playlistId: string, songs: any[]) => request<any>(`/music/playlists/${playlistId}/songs/reorder`, { method: 'PUT', body: JSON.stringify({ songs }) }),
+    getFavorites: () => request<any[]>('/music/favorites', { method: 'GET' }),
+    addFavorite: (song: any) => request<any>('/music/favorites', { method: 'POST', body: JSON.stringify(song) }),
+    removeFavorite: (songId: string) => request<any>(`/music/favorites/${songId}`, { method: 'DELETE' }),
+    getHistory: () => request<any>('/music/history', { method: 'GET' }),
+    recordHistory: (song: any) => request<any>('/music/history', { method: 'POST', body: JSON.stringify(song) })
   },
   chats: {
     getConversations: () => request<any[]>('/chats/conversations', { method: 'GET', skipLoader: true }),

@@ -9,6 +9,42 @@ const JWT_SECRET = process.env.JWT_SECRET || 'playverse-jwt-secret-key-123456';
 
 const activeTimers: Map<string, NodeJS.Timeout> = new Map();
 
+const triggerBotMove = (io: Server, roomCode: string) => {
+  const delay = Math.floor(Math.random() * 2000) + 1000; // 1-3 seconds
+  setTimeout(async () => {
+    try {
+      const room = roomManager.getRoom(roomCode);
+      if (!room || room.status !== 'playing' || !room.gameState || room.gameState.turn !== 'computer_bot') return;
+
+      const grid = room.gameState.board.grid;
+      const unmarked = grid.filter((c: any) => !c.marked);
+      if (unmarked.length === 0) return;
+
+      const randomCell = unmarked[Math.floor(Math.random() * unmarked.length)];
+
+      const updatedRoom = await roomManager.handleMove('bot_socket', randomCell.number);
+      io.to(`room_${roomCode}`).emit('room-updated', updatedRoom);
+
+      if (updatedRoom.status === 'gameover' || updatedRoom.gameState?.status === 'gameover') {
+        stopRoomTimer(roomCode);
+        io.to(`room_${roomCode}`).emit('game-over', {
+          winner: updatedRoom.gameState?.winner,
+          reason: 'ended',
+        });
+        io.emit('stats-updated');
+        await broadcastUserProfileUpdates(io, updatedRoom);
+      } else {
+        startRoomTimer(io, roomCode);
+        if (updatedRoom.gameState?.turn === 'computer_bot') {
+          triggerBotMove(io, roomCode);
+        }
+      }
+    } catch (err) {
+      console.error('Error executing bot move:', err);
+    }
+  }, delay);
+};
+
 const startRoomTimer = (io: Server, roomCode: string) => {
   stopRoomTimer(roomCode);
 
@@ -148,12 +184,19 @@ const startRoomTimer = (io: Server, roomCode: string) => {
         const updatedRoom = await roomManager.handleTimeout(roomCode);
         if (updatedRoom) {
           io.to(`room_${roomCode}`).emit('room-updated', updatedRoom);
-          io.to(`room_${roomCode}`).emit('game-over', {
-            winner: updatedRoom.gameState?.winner,
-            reason: 'timeout',
-          });
-          io.emit('stats-updated');
-          await broadcastUserProfileUpdates(io, updatedRoom);
+          if (updatedRoom.status === 'gameover' || updatedRoom.gameState?.status === 'gameover') {
+            io.to(`room_${roomCode}`).emit('game-over', {
+              winner: updatedRoom.gameState?.winner,
+              reason: 'timeout',
+            });
+            io.emit('stats-updated');
+            await broadcastUserProfileUpdates(io, updatedRoom);
+          } else {
+            startRoomTimer(io, roomCode);
+            if (updatedRoom.game === 'bingo' && updatedRoom.gameState?.turn === 'computer_bot') {
+              triggerBotMove(io, roomCode);
+            }
+          }
         }
       }
     }
@@ -234,7 +277,7 @@ export const socketHandler = (io: Server) => {
       await broadcastOnlineUsers(io);
     });
 
-    socket.on('create-room', async ({ game, isPrivate }) => {
+    socket.on('create-room', async ({ game, isPrivate, maxPlayers, vsComputer }) => {
       try {
         const dbUser = await User.findById(user._id);
         if (!dbUser || dbUser.coins < 50) {
@@ -248,8 +291,21 @@ export const socketHandler = (io: Server) => {
           user.rating,
           socket.id,
           game,
-          isPrivate
+          isPrivate,
+          vsComputer ? 2 : maxPlayers
         );
+
+        if (game === 'bingo' && vsComputer) {
+          room.players.push({
+            id: 'computer_bot',
+            username: '🤖 Computer AI',
+            avatar: 'C',
+            rating: 1000,
+            socketId: 'bot_socket',
+            isReady: true,
+            symbol: 'B'
+          });
+        }
         socket.join(`room_${room.id}`);
         socket.emit('room-created', room);
         
@@ -300,6 +356,9 @@ export const socketHandler = (io: Server) => {
         io.to(`room_${room.id}`).emit('game-started', room);
         
         startRoomTimer(io, room.id);
+        if (room.game === 'bingo' && room.gameState?.turn === 'computer_bot') {
+          triggerBotMove(io, room.id);
+        }
         io.emit('public-rooms', roomManager.getPublicRooms());
       } catch (err: any) {
         socket.emit('error', err.message);
@@ -332,6 +391,9 @@ export const socketHandler = (io: Server) => {
             }
           }
           startRoomTimer(io, room.id);
+          if (room.game === 'bingo' && room.gameState?.turn === 'computer_bot') {
+            triggerBotMove(io, room.id);
+          }
         }
       } catch (err: any) {
         socket.emit('error', err.message);
@@ -345,6 +407,9 @@ export const socketHandler = (io: Server) => {
         if (result.startRematch) {
           io.to(`room_${room.id}`).emit('game-started', room);
           startRoomTimer(io, room.id);
+          if (room.game === 'bingo' && room.gameState?.turn === 'computer_bot') {
+            triggerBotMove(io, room.id);
+          }
         }
       } catch (err: any) {
         socket.emit('error', err.message);
@@ -699,8 +764,8 @@ export const socketHandler = (io: Server) => {
           maxParticipants,
           isPrivate
         );
-        socket.join(`music_room_${room.id}`);
-        socket.emit('music-room:created', room);
+        socket.emit('music-room:created-success', { roomCode: room.id });
+        io.emit('music-room:public-rooms', musicRoomManager.getPublicRooms());
       } catch (err: any) {
         socket.emit('error', err.message);
       }
@@ -718,6 +783,7 @@ export const socketHandler = (io: Server) => {
         );
         socket.join(`music_room_${room.id}`);
         io.to(`music_room_${room.id}`).emit('music-room:updated', room);
+        io.emit('music-room:public-rooms', musicRoomManager.getPublicRooms());
       } catch (err: any) {
         socket.emit('error', err.message);
       }
@@ -742,14 +808,18 @@ export const socketHandler = (io: Server) => {
       }
     });
 
-    socket.on('music-room:queue-update', ({ actionType, data }) => {
+    socket.on('music-room:request-song', ({ song }) => {
       try {
-        const room = musicRoomManager.updateQueue(
-          socket.id,
-          actionType,
-          data,
-          user.username
-        );
+        const room = musicRoomManager.requestSong(socket.id, song);
+        io.to(`music_room_${room.id}`).emit('music-room:updated', room);
+      } catch (err: any) {
+        socket.emit('error', err.message);
+      }
+    });
+
+    socket.on('music-room:handle-request', ({ songId, action }) => {
+      try {
+        const room = musicRoomManager.handleRequest(socket.id, songId, action);
         io.to(`music_room_${room.id}`).emit('music-room:updated', room);
       } catch (err: any) {
         socket.emit('error', err.message);
@@ -856,8 +926,18 @@ const handleUserLeaving = async (io: Server, socket: Socket) => {
   if (musicResult) {
     const { roomCode, room, wasDeleted } = musicResult;
     socket.leave(`music_room_${roomCode}`);
-    if (!wasDeleted && room) {
+    if (wasDeleted) {
+      io.to(`music_room_${roomCode}`).emit('music-room:closed', { reason: 'Host has left the room. Room closed.' });
+      const roomSockets = io.sockets.adapter.rooms.get(`music_room_${roomCode}`);
+      if (roomSockets) {
+        for (const id of roomSockets) {
+          const s = io.sockets.sockets.get(id);
+          if (s) s.leave(`music_room_${roomCode}`);
+        }
+      }
+    } else if (room) {
       io.to(`music_room_${roomCode}`).emit('music-room:updated', room);
     }
+    io.emit('music-room:public-rooms', musicRoomManager.getPublicRooms());
   }
 };

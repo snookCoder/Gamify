@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useMusicStore, Song } from '../../store/useMusicStore';
 import { useAuthStore } from '../../store/useAuthStore';
-import { ThumbsUp, ThumbsDown, Trash2, ChevronUp, ChevronDown, Copy, Settings, Crown, LogOut, CheckCircle2 } from 'lucide-react';
+import { Trash2, ChevronUp, ChevronDown, Copy, Settings, Crown, LogOut, CheckCircle2, Music } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../../services/api';
 import { useGameStore } from '../../store/useGameStore';
@@ -13,7 +13,7 @@ export const MusicQueue: React.FC = () => {
     localQueue,
     removeFromQueue,
     reorderQueue,
-    voteSong,
+    approveRequest,
     transferHost,
     toggleControl,
     leaveRoom,
@@ -70,15 +70,7 @@ export const MusicQueue: React.FC = () => {
     addToast('Room code copied!', 'success');
   };
 
-  const getVoteState = (song: Song) => {
-    if (!song.votes || !currentUserId) return null;
-    return song.votes[currentUserId] || null;
-  };
-
-  const handleVote = (songId: string, currentVote: 'up' | 'down' | null, type: 'up' | 'down') => {
-    const targetVote = currentVote === type ? null : type;
-    voteSong(songId, targetVote);
-  };
+  // Removed voting handlers
 
   const handleMoveUp = (index: number) => {
     const queue = isRoomMode ? [...(room?.queue || [])] : [...localQueue];
@@ -243,6 +235,48 @@ export const MusicQueue: React.FC = () => {
                 </div>
               </div>
             )}
+            {/* Pending Song Requests (Host Only) */}
+            {isRoomMode && isHost && room.requests && room.requests.length > 0 && (
+              <div className="mb-4 animate-none">
+                <div className="text-[10px] font-black text-purple-400 uppercase tracking-widest font-mono mb-2 select-none flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse shadow-[0_0_6px_#a855f7]" />
+                  Pending Song Requests ({room.requests.length})
+                </div>
+                <div className="space-y-2.5 bg-purple-950/10 border border-purple-500/10 p-2.5 rounded-2xl max-h-[220px] overflow-y-auto">
+                  {room.requests.map((song) => (
+                    <div key={`${song.id}_req`} className="flex items-center justify-between p-2 bg-slate-900/40 border border-white/5 rounded-xl">
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <div className="w-8 h-8 rounded bg-slate-950 flex items-center justify-center shrink-0 overflow-hidden border border-white/5">
+                          {song.artworkUrl100 ? (
+                            <img src={song.artworkUrl100} alt={song.title} className="w-full h-full object-cover" />
+                          ) : (
+                            <Music className="w-4 h-4 text-purple-400" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-gray-250 truncate">{song.title}</div>
+                          <div className="text-[9px] text-gray-500 truncate mt-0.5">Requested by: {song.addedBy || 'Player'}</div>
+                        </div>
+                      </div>
+                      <div className="flex gap-1 shrink-0 ml-2">
+                        <button
+                          onClick={() => approveRequest(song.id, 'approve')}
+                          className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-450 hover:text-white rounded-lg border border-emerald-500/20 active:scale-95 text-[9px] font-black transition-all cursor-pointer uppercase tracking-wider"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => approveRequest(song.id, 'reject')}
+                          className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-455 hover:text-white rounded-lg border border-rose-500/20 active:scale-95 text-[9px] font-black transition-all cursor-pointer uppercase tracking-wider"
+                        >
+                          Decline
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Queue Song List */}
             <div>
@@ -258,7 +292,6 @@ export const MusicQueue: React.FC = () => {
                 ) : (
                   <AnimatePresence>
                     {currentQueue.map((song, idx) => {
-                      const voteState = getVoteState(song);
                       const isControlsAllowed = !isRoomMode || isHost || room?.allowEveryoneControl;
 
                       return (
@@ -290,50 +323,29 @@ export const MusicQueue: React.FC = () => {
                           )}
 
                           {/* Info */}
-                          <div className="min-w-0 flex-1">
-                            <div className="text-xs font-bold text-gray-200 truncate">{song.title}</div>
-                            <div className="text-[9px] text-gray-500 truncate flex items-center gap-1.5">
-                              <span>{song.artist}</span>
-                              {song.addedBy && (
-                                <span className="text-[8px] bg-slate-950/40 text-purple-400 border border-purple-500/10 px-1 rounded-sm uppercase tracking-wide">
-                                  👤 {song.addedBy}
-                                </span>
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <div className="w-8 h-8 rounded-lg bg-slate-900 border border-white/10 flex items-center justify-center shrink-0 overflow-hidden">
+                              {song.artworkUrl100 ? (
+                                <img src={song.artworkUrl100} alt={song.title} className="w-full h-full object-cover" />
+                              ) : (
+                                <Music className="w-4 h-4 text-emerald-450" />
                               )}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold text-gray-200 truncate">{song.title}</div>
+                              <div className="text-[9px] text-gray-550 truncate flex items-center gap-1.5">
+                                <span>{song.artist}</span>
+                                {song.addedBy && (
+                                  <span className="text-[8px] bg-slate-950/40 text-purple-400 border border-purple-500/10 px-1 rounded-sm uppercase tracking-wide font-mono font-bold">
+                                    👤 {song.addedBy}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
 
-                          {/* Right Side: Voting (Room Mode) / Remove (Solo) */}
+                          {/* Right Side: Remove button */}
                           <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                            {isRoomMode ? (
-                              <>
-                                {/* Vote Count */}
-                                <span className={`text-[10px] font-bold font-mono pr-1
-                                  ${(song.voteCount || 0) > 0 ? 'text-emerald-400' : (song.voteCount || 0) < 0 ? 'text-rose-500' : 'text-gray-500'}`}
-                                >
-                                  {(song.voteCount || 0) > 0 ? `+${song.voteCount}` : song.voteCount || 0}
-                                </span>
-
-                                {/* Upvote */}
-                                <button
-                                  onClick={() => handleVote(song.id, voteState, 'up')}
-                                  className={`p-1.5 rounded-lg hover:bg-white/5 transition-all cursor-pointer
-                                    ${voteState === 'up' ? 'text-emerald-400 bg-emerald-500/10' : 'text-gray-500'}`}
-                                >
-                                  <ThumbsUp className="w-3 h-3 fill-current" />
-                                </button>
-
-                                {/* Downvote */}
-                                <button
-                                  onClick={() => handleVote(song.id, voteState, 'down')}
-                                  className={`p-1.5 rounded-lg hover:bg-white/5 transition-all cursor-pointer
-                                    ${voteState === 'down' ? 'text-rose-500 bg-rose-500/10' : 'text-gray-500'}`}
-                                >
-                                  <ThumbsDown className="w-3 h-3 fill-current" />
-                                </button>
-                              </>
-                            ) : null}
-
-                            {/* Remove button */}
                             {isControlsAllowed && (
                               <button
                                 onClick={() => handleRemove(song.id)}

@@ -23,6 +23,7 @@ export interface Room {
   gameState: GameState | null;
   turnTimeLeft: number; // 30s
   rematchRequests?: string[]; // track player IDs who requested rematch
+  maxPlayers?: number;
 }
 
 class RoomManager {
@@ -48,11 +49,16 @@ class RoomManager {
     rating: number,
     socketId: string,
     game: string = 'tic-tac-toe',
-    isPrivate: boolean = false
+    isPrivate: boolean = false,
+    maxPlayers?: number
   ): Room {
     this.leaveRoom(socketId);
 
     const roomCode = this.generateRoomCode();
+    let roomMax = 2;
+    if (game === 'guess-the-song') roomMax = 20;
+    else if (game === 'bingo') roomMax = maxPlayers || 4;
+
     const room: Room = {
       id: roomCode,
       hostId,
@@ -70,7 +76,8 @@ class RoomManager {
         },
       ],
       gameState: null,
-      turnTimeLeft: 30,
+      turnTimeLeft: game === 'bingo' ? 20 : 30,
+      maxPlayers: roomMax,
     };
 
     this.rooms.set(roomCode, room);
@@ -103,7 +110,7 @@ class RoomManager {
       return room;
     }
 
-    const maxPlayers = room.game === 'guess-the-song' ? 20 : 2;
+    const maxPlayers = room.maxPlayers || (room.game === 'guess-the-song' ? 20 : 2);
     if (room.players.length >= maxPlayers) {
       throw new Error('Room is full');
     }
@@ -133,7 +140,7 @@ class RoomManager {
 
   getPublicRooms(): Room[] {
     return Array.from(this.rooms.values()).filter(
-      (room) => !room.isPrivate && room.status === 'waiting' && room.players.length < (room.game === 'guess-the-song' ? 20 : 2)
+      (room) => !room.isPrivate && room.status === 'waiting' && room.players.length < (room.maxPlayers || (room.game === 'guess-the-song' ? 20 : 2))
     );
   }
 
@@ -284,6 +291,17 @@ class RoomManager {
       board.category = cat;
 
       room.turnTimeLeft = 20;
+    } else if (room.game === 'bingo') {
+      const symbols = ['A', 'B', 'C', 'D'];
+      room.players.forEach((p, idx) => {
+        p.symbol = symbols[idx] || 'A';
+      });
+
+      const playerIds = room.players.map((p) => p.id);
+      const engine = getGameEngine(room.game);
+      room.gameState = engine.initializeGame(playerIds);
+      room.status = 'playing';
+      room.turnTimeLeft = 20;
     } else {
       room.players[0].symbol = 'X';
       if (room.players[1]) room.players[1].symbol = 'O';
@@ -371,7 +389,7 @@ class RoomManager {
     }
 
     room.gameState = engine.applyMove(room.gameState, move, playerSymbol, playerIds);
-    room.turnTimeLeft = 30;
+    room.turnTimeLeft = room.game === 'bingo' ? 20 : 30;
 
     if (room.gameState.status === 'gameover') {
       await this.handleGameOver(room, room.gameState.winner!);
@@ -395,6 +413,13 @@ class RoomManager {
       const nextIdx = (currentIdx + 1) % players.length;
       room.gameState.turn = players[nextIdx];
       room.turnTimeLeft = 30;
+      return room;
+    } else if (room.game === 'bingo') {
+      const players = room.players.map((p) => p.id);
+      const currentIdx = players.indexOf(room.gameState.turn);
+      const nextIdx = (currentIdx + 1) % players.length;
+      room.gameState.turn = players[nextIdx];
+      room.turnTimeLeft = 20;
       return room;
     } else {
       const activePlayerId = room.gameState.turn;
@@ -458,7 +483,8 @@ class RoomManager {
       room.rematchRequests.push(player.id);
     }
 
-    if (room.rematchRequests.length >= 2) {
+    const activeHumanCount = room.players.filter(p => p.id !== 'computer_bot').length;
+    if (room.rematchRequests.length >= Math.max(1, activeHumanCount)) {
       room.rematchRequests = [];
       room.status = 'playing';
 
@@ -470,6 +496,11 @@ class RoomManager {
       } else if (room.game === 'guess-the-song') {
         room.players.forEach((p) => {
           p.symbol = 'Player';
+        });
+      } else if (room.game === 'bingo') {
+        const symbols = ['A', 'B', 'C', 'D'];
+        room.players.forEach((p, idx) => {
+          p.symbol = symbols[idx] || 'A';
         });
       } else {
         room.players[0].symbol = 'X';
@@ -564,6 +595,11 @@ class RoomManager {
         board.previewStartOffset = Math.floor(Math.random() * 10);
         board.category = oldCategory;
 
+        room.turnTimeLeft = 20;
+      } else if (room.game === 'bingo') {
+        const playerIds = room.players.map((p) => p.id);
+        const engine = getGameEngine(room.game);
+        room.gameState = engine.initializeGame(playerIds);
         room.turnTimeLeft = 20;
       } else {
         const playerIds = room.players.map((p) => p.id);

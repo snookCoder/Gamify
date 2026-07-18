@@ -57,6 +57,7 @@ export default function Dashboard() {
     { id: 'music-room', name: 'Music Party', emoji: '📻🎵', active: true, desc: 'Listen to synchronized music previews alone or in rooms with up to 5 friends!' },
     { id: 'tic-tac-toe', name: 'Tic-Tac-Toe', emoji: '❌⭕', active: true, desc: 'Align 3 symbols to conquer the board.' },
     { id: 'guess-the-song', name: 'Guess The Song', emoji: '🎵🎧', active: true, desc: 'Listen to short audio previews and guess the title as fast as possible!' },
+    { id: 'bingo', name: 'Bingo Tambola', emoji: '🔢🏆', active: true, desc: 'Mark numbers on a shared 5x5 board in turns and race to complete 5 lines!' },
     { id: 'chess', name: 'Chess', emoji: '👑♟️', active: false, desc: 'Classic board game of intellect. Coming soon!' },
     { id: 'connect4', name: 'Connect 4', emoji: '🔴🟡', active: false, desc: 'Drop tokens to connect 4 in a row. Coming soon!' },
   ];

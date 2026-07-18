@@ -65,7 +65,7 @@ interface GameStoreState {
 
   connectSocket: (token: string, onRoomCreated?: (roomCode: string) => void, onRoomJoined?: (roomCode: string) => void) => void;
   disconnectSocket: () => void;
-  createRoom: (game: string, isPrivate: boolean) => void;
+  createRoom: (game: string, isPrivate: boolean, maxPlayers?: number, vsComputer?: boolean) => void;
   joinRoom: (roomCode: string) => void;
   leaveRoom: () => void;
   toggleReady: (isReady: boolean) => void;
@@ -201,7 +201,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     }
   },
 
-  createRoom: (game, isPrivate) => {
+  createRoom: (game, isPrivate, maxPlayers, vsComputer) => {
     const coins = useAuthStore.getState().user?.coins ?? 0;
     if (coins < 50) {
       set({ error: 'Insufficient Coins! You need at least 50 coins to play. 🪙' });
@@ -209,7 +209,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     }
     const { socket } = get();
     if (socket) {
-      socket.emit('create-room', { game, isPrivate });
+      socket.emit('create-room', { game, isPrivate, maxPlayers, vsComputer });
     }
   },
 

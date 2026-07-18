@@ -5,6 +5,7 @@ import { InviteModal } from "../components/InviteModal";
 import { GlobalErrorModal } from "../components/GlobalErrorModal";
 import { GlobalLoader } from "../components/GlobalLoader";
 import { PWARegister } from "../components/PWARegister";
+import { MusicBanner } from "../components/MusicBanner";
 
 
 const outfit = Outfit({
@@ -36,6 +37,7 @@ export default function RootLayout({
         <meta name="theme-color" content="#8b5cf6" />
       </head>
       <body className="min-h-full font-sans antialiased text-gray-100 flex flex-col">
+        <MusicBanner />
         {children}
         <InviteModal />
         <GlobalErrorModal />

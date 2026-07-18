@@ -14,7 +14,7 @@ import { MusicChat } from '../../../components/music/MusicChat';
 import { CreateRoomModal } from '../../../components/music/CreateRoomModal';
 import { Loader } from '../../../components/ui/Loader';
 import { Button } from '../../../components/ui/Button';
-import { MessageSquare, ListMusic, Play, Radio, Users, PlusCircle, LogIn, Search, Heart, Pause, SkipForward, ChevronDown } from 'lucide-react';
+import { MessageSquare, ListMusic, Play, Radio, Users, PlusCircle, LogIn, Search, Heart, Pause, SkipForward, ChevronDown, Lock, Unlock, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 function MusicRoomPageContent() {
@@ -50,12 +50,16 @@ function MusicRoomPageContent() {
     togglePlay,
     nextSong,
     setIsPlayerExpanded,
-    leaveRoom
+    leaveRoom,
+    activeRooms,
+    fetchActiveRooms
   } = useMusicStore();
 
   const [mounted, setMounted] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [joinCodeInput, setJoinCodeInput] = useState('');
+  const [dismissedRoomIds, setDismissedRoomIds] = useState<string[]>([]);
+  const visibleRooms = activeRooms.filter(r => !dismissedRoomIds.includes(r.id));
   
   // Top Search Value
   const [searchVal, setSearchVal] = useState('');
@@ -67,16 +71,6 @@ function MusicRoomPageContent() {
 
   useEffect(() => {
     setMounted(true);
-    return () => {
-      const { isRoomMode, leaveRoom, stop } = useMusicStore.getState();
-      if (isRoomMode) {
-        console.log('User navigated away from music-room, leaving room...');
-        leaveRoom();
-      } else {
-        console.log('User navigated away from music-room, stopping solo playback...');
-        stop();
-      }
-    };
   }, []);
 
   // Load playlists on mount
@@ -85,6 +79,17 @@ function MusicRoomPageContent() {
       fetchPlaylists();
     }
   }, [mounted, isAuthenticated, fetchPlaylists]);
+
+  // Load active public rooms on mount and periodically
+  useEffect(() => {
+    if (mounted && isAuthenticated) {
+      fetchActiveRooms();
+      const interval = setInterval(() => {
+        fetchActiveRooms();
+      }, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [mounted, isAuthenticated, fetchActiveRooms]);
 
   // Debounced top search
   useEffect(() => {
@@ -138,7 +143,9 @@ function MusicRoomPageContent() {
       useMusicStore.getState().fetchTrendingSongs();
 
       return () => {
-        cleanupSocketListeners();
+        if (!useMusicStore.getState().room) {
+          cleanupSocketListeners();
+        }
       };
     }
   }, [isConnected, socket, setupSocketListeners, cleanupSocketListeners, joinCode, joinRoom]);
@@ -165,55 +172,44 @@ function MusicRoomPageContent() {
 
       <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 py-4 md:px-6 md:py-6 flex flex-col gap-4 pb-36 lg:pb-36 overflow-hidden">
         
-        {/* Upper Header Control Bar (If not in room) */}
-        {!isRoomMode && (
-          <div className="glass-panel rounded-3xl p-4 md:p-6 flex flex-col md:flex-row items-center justify-between gap-4 border border-white/5 shadow-xl relative overflow-hidden shrink-0">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-600/5 rounded-full filter blur-[50px] -z-10" />
-            <div className="flex items-center gap-3.5 text-left w-full md:w-auto">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-purple-500/20 flex items-center justify-center text-emerald-440 font-bold border border-white/5 shadow-md shrink-0">
-                📻
-              </div>
-              <div>
-                <h1 className="font-display font-extrabold text-lg md:text-xl text-white tracking-wide flex items-center gap-2">
-                  Music Party Arena
+        {/* Upper Header Control Bar */}
+        <div className="glass-panel rounded-3xl p-4 md:p-6 flex flex-col md:flex-row items-center justify-between gap-4 border border-white/5 shadow-xl relative overflow-hidden shrink-0">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-600/5 rounded-full filter blur-[50px] -z-10" />
+          <div className="flex items-center gap-3.5 text-left w-full md:w-auto">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-purple-500/20 flex items-center justify-center text-emerald-440 font-bold border border-white/5 shadow-md shrink-0">
+              📻
+            </div>
+            <div>
+              <h1 className="font-display font-extrabold text-lg md:text-xl text-white tracking-wide flex items-center gap-2">
+                Music Party Arena
+                {isRoomMode ? (
+                  <span className="text-[9px] bg-purple-500/20 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded-full font-bold tracking-widest font-mono">
+                    PARTY MODE
+                  </span>
+                ) : (
                   <span className="text-[9px] bg-emerald-500/20 text-emerald-450 border border-emerald-500/20 px-2 py-0.5 rounded-full font-bold tracking-widest font-mono">
                     SOLO MODE
                   </span>
-                </h1>
-                <p className="text-gray-400 text-xs mt-0.5">
-                  Listen alone, search songs, or create rooms to play in perfect real-time sync with friends.
-                </p>
-              </div>
-            </div>
-
-            {/* Actions: Join or Create Room */}
-            <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto select-none">
-              {/* Join Input */}
-              <form onSubmit={handleJoinSubmit} className="flex gap-1.5 w-full sm:w-auto bg-slate-950/40 p-1.5 rounded-2xl border border-white/5">
-                <input
-                  type="text"
-                  maxLength={5}
-                  placeholder="ENTER CODE..."
-                  value={joinCodeInput}
-                  onChange={(e) => setJoinCodeInput(e.target.value)}
-                  className="bg-transparent text-xs text-white uppercase font-mono tracking-widest font-extrabold px-3 py-1.5 w-28 focus:outline-none placeholder-gray-600"
-                />
-                <Button type="submit" variant="ghost" size="sm" className="gap-1 px-4 py-1.5 text-xs text-emerald-450 hover:bg-emerald-500/10 cursor-pointer">
-                  <LogIn className="w-3.5 h-3.5" /> Join Party
-                </Button>
-              </form>
-
-              {/* Create Button */}
-              <Button
-                variant="primary"
-                onClick={() => setShowCreateModal(true)}
-                className="gap-1.5 w-full sm:w-auto py-2.5 px-6 font-bold cursor-pointer text-xs md:text-sm whitespace-nowrap bg-gradient-to-r from-emerald-500 to-purple-600 hover:from-emerald-400 hover:to-purple-500 shadow-md shadow-emerald-500/5 hover-glow-purple"
-              >
-                <PlusCircle className="w-4 h-4" /> Create Music Room
-              </Button>
+                )}
+              </h1>
+              <p className="text-gray-400 text-xs mt-0.5">
+                Listen alone, search songs, or create rooms to play in perfect real-time sync with friends.
+              </p>
             </div>
           </div>
-        )}
+
+          {/* Actions: Create Room Only */}
+          <div className="flex items-center gap-3 w-full md:w-auto select-none justify-end">
+            {/* Create Button */}
+            <Button
+              variant="primary"
+              onClick={() => setShowCreateModal(true)}
+              className="gap-1.5 w-full sm:w-auto py-2.5 px-6 font-bold cursor-pointer text-xs md:text-sm whitespace-nowrap bg-gradient-to-r from-emerald-500 to-purple-600 hover:from-emerald-400 hover:to-purple-500 shadow-md shadow-emerald-500/5 hover-glow-purple"
+            >
+              <PlusCircle className="w-4 h-4" /> Create Music Room
+            </Button>
+          </div>
+        </div>
 
         {/* Room Header Controls (If inside a room) */}
         {isRoomMode && room && (
@@ -307,8 +303,15 @@ function MusicRoomPageContent() {
                           setSearchVal('');
                         }}
                       >
-                        <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-450 flex items-center justify-center shrink-0">
-                          <Play className="w-3.5 h-3.5 fill-current" />
+                        <div className="w-8 h-8 rounded-xl bg-slate-900 border border-white/10 flex items-center justify-center shrink-0 overflow-hidden relative group-hover:border-emerald-500/40">
+                          {song.artworkUrl100 ? (
+                            <img src={song.artworkUrl100} alt={song.title} className="w-full h-full object-cover" />
+                          ) : (
+                            <Play className="w-3 h-3 fill-emerald-450 text-emerald-450" />
+                          )}
+                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
+                            <Play className="w-3.5 h-3.5 text-white fill-current" />
+                          </div>
                         </div>
                         <div className="min-w-0">
                           <div className="text-xs font-bold text-gray-200 truncate group-hover:text-white">{song.title}</div>
@@ -396,6 +399,102 @@ function MusicRoomPageContent() {
                 <MusicChat />
               </div>
             )}
+            {visibleRooms.length > 0 && (
+              <div className="mt-6 relative z-10 select-none animate-none">
+                <h3 className="text-xs font-black text-emerald-400 uppercase tracking-widest font-mono mb-3 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]" />
+                  Active Rooms & Lobbies
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {visibleRooms.map(r => {
+                    const currentSongName = r.playbackState?.currentSong 
+                      ? `${r.playbackState.currentSong.title} - ${r.playbackState.currentSong.artist}`
+                      : 'Silence';
+                    
+                    const isPriv = String(r.isPrivate) === 'true';
+                    const isCurrentRoom = room && room.id === r.id;
+                    const isHost = user && (user._id === r.hostId || user.id === r.hostId);
+
+                    return (
+                      <div
+                        key={r.id}
+                        className="group bg-slate-900/35 border border-white/5 hover:border-emerald-500/30 p-4 rounded-2xl transition-all flex flex-col justify-between shadow-xl relative overflow-hidden"
+                      >
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full filter blur-xl pointer-events-none" />
+                        
+                        {/* Delete / Dismiss Button */}
+                        <button
+                          onClick={() => setDismissedRoomIds(prev => [...prev, r.id])}
+                          className="absolute top-3 right-3 text-gray-500 hover:text-rose-455 transition-colors cursor-pointer p-1 rounded-lg hover:bg-white/5 z-10"
+                          title="Hide Lobby"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+
+                        <div className="flex items-start justify-between gap-8">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-xs font-black text-gray-200 group-hover:text-white truncate uppercase tracking-wider font-mono text-left">
+                                {r.name}
+                              </h4>
+                              {isPriv ? (
+                                <Lock className="w-3 h-3 text-purple-400 shrink-0" title="Private Lobby" />
+                              ) : (
+                                <Unlock className="w-3 h-3 text-emerald-450 shrink-0" title="Public Lobby" />
+                              )}
+                              {isPriv && isHost && (
+                                <span className="text-[9px] bg-purple-500/25 border border-purple-500/30 text-purple-300 px-1.5 py-0.5 rounded font-mono font-black tracking-widest select-all shrink-0 ml-1" title="Share room code with friends">
+                                  🔑 {r.id}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-gray-400 truncate mt-1 text-left">
+                              Host: <span className="text-gray-300 font-bold">{r.hostUsername || 'Host'}</span>
+                            </p>
+                            <p className="text-[9px] text-gray-500 truncate mt-1.5 flex items-center gap-1 text-left">
+                              🎵 Playing: <span className="text-emerald-400/90 font-bold truncate max-w-[180px]">{currentSongName}</span>
+                            </p>
+                          </div>
+                          
+                          <div className="bg-slate-950 border border-white/5 px-2 py-1 rounded-xl text-[9px] font-mono text-purple-400 font-bold shrink-0 self-start mr-5">
+                            {r.players.length} / {r.maxParticipants} Players
+                          </div>
+                        </div>
+                        
+                        <div className="mt-4 flex gap-2">
+                          <Button
+                            onClick={() => {
+                              if (isCurrentRoom) return;
+                              if (isPriv && !isHost) {
+                                const inputCode = prompt("Enter 5-character Room Code to join:");
+                                if (inputCode) {
+                                  if (inputCode.trim().toUpperCase() === r.id.toUpperCase()) {
+                                    joinRoom(r.id);
+                                  } else {
+                                    alert("Incorrect Room Code! Please request the host for the code.");
+                                  }
+                                }
+                              } else {
+                                joinRoom(r.id);
+                              }
+                            }}
+                            variant={isCurrentRoom ? 'ghost' : 'primary'}
+                            className={`w-full text-[10px] font-black py-2 rounded-xl shadow-md cursor-pointer uppercase tracking-wider
+                              ${isCurrentRoom
+                                ? 'border border-emerald-500/35 text-emerald-450 bg-emerald-500/5 hover:bg-emerald-500/10'
+                                : isPriv 
+                                  ? 'bg-gradient-to-r from-purple-500 to-indigo-650 hover:from-purple-400 hover:to-indigo-500 text-white' 
+                                  : 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white'}`}
+                          >
+                            {isCurrentRoom ? '✔ Joined Lobby' : isPriv && !isHost ? 'Enter Code & Join' : 'Join Lobbies Room'}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Seeded Default Playlists Grid (Spotify Style Home Screen) */}
             {playlists.length > 0 && (
@@ -420,8 +519,12 @@ function MusicRoomPageContent() {
                         }}
                         className="group bg-slate-900/30 border border-white/5 p-4 rounded-2xl hover:bg-slate-900/60 hover:border-emerald-500/30 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer flex flex-col items-center text-center shadow-lg"
                       >
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/20 to-purple-600/20 flex items-center justify-center text-xl mb-2.5 shadow-md border border-white/5 group-hover:scale-105 transition-transform">
-                          {icon}
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/20 to-purple-600/20 flex items-center justify-center text-xl mb-2.5 shadow-md border border-white/5 group-hover:scale-105 transition-transform overflow-hidden relative shrink-0">
+                          {pl.artworkUrl ? (
+                            <img src={pl.artworkUrl} alt={pl.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <span>{icon}</span>
+                          )}
                         </div>
                         <div className="text-xs font-bold text-gray-200 group-hover:text-white truncate max-w-full leading-tight">{pl.name}</div>
                         <div className="text-[9px] text-gray-500 font-mono tracking-wider uppercase mt-1 font-bold">{pl.songs.length} Tracks</div>
@@ -510,10 +613,14 @@ function MusicRoomPageContent() {
             className="fixed bottom-20 left-4 right-4 md:left-6 md:right-6 max-w-4xl mx-auto z-40 glass-panel border border-emerald-500/25 rounded-2xl p-3 flex items-center justify-between shadow-2xl cursor-pointer hover:border-emerald-500/40 hover:scale-[1.01] transition-all select-none animate-none"
           >
             <div className="flex items-center gap-3.5 min-w-0 flex-1">
-              <div className={`w-8.5 h-8.5 rounded-full bg-gradient-to-br from-emerald-500 to-purple-600 flex items-center justify-center text-white text-xs font-black shadow-md
-                ${isPlaying ? 'animate-[spin_6s_linear_infinite]' : ''}`}
+              <div className={`w-8.5 h-8.5 rounded-full bg-gradient-to-br from-emerald-500 to-purple-600 flex items-center justify-center text-white text-xs font-black shadow-md overflow-hidden relative shrink-0
+                ${isPlaying ? 'animate-[spin_8s_linear_infinite]' : ''}`}
               >
-                📻
+                {currentSong.artworkUrl100 ? (
+                  <img src={currentSong.artworkUrl100} alt={currentSong.title} className="w-full h-full object-cover" />
+                ) : (
+                  <span>📻</span>
+                )}
               </div>
               <div className="min-w-0 flex-1 pr-4">
                 <div className="text-xs font-black text-gray-200 truncate">{currentSong.title}</div>

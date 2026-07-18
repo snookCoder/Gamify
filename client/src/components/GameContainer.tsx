@@ -122,7 +122,7 @@ export const GameContainer: React.FC = () => {
       <div className="w-full flex items-center justify-between px-6 py-4 bg-slate-950/30 border-b border-white/5 select-none mb-6">
         <div className="flex items-center gap-3">
           <div className="relative flex items-center justify-center bg-slate-900 border border-white/5 rounded-xl px-4 py-2 text-sm font-bold text-gray-200">
-            {room.game === 'tic-tac-toe' ? 'Tic-Tac-Toe' : room.game}
+            {room.game === 'tic-tac-toe' ? 'Tic-Tac-Toe' : room.game === 'bingo' ? 'Bingo Tambola' : room.game === 'guess-the-song' ? 'Guess The Song' : room.game}
           </div>
           <span className="text-sm font-semibold text-gray-400">{statusText}</span>
         </div>

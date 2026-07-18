@@ -87,7 +87,8 @@ export const api = {
     addFavorite: (song: any) => request<any>('/music/favorites', { method: 'POST', body: JSON.stringify(song) }),
     removeFavorite: (songId: string) => request<any>(`/music/favorites/${songId}`, { method: 'DELETE' }),
     getHistory: () => request<any>('/music/history', { method: 'GET' }),
-    recordHistory: (song: any) => request<any>('/music/history', { method: 'POST', body: JSON.stringify(song) })
+    recordHistory: (song: any) => request<any>('/music/history', { method: 'POST', body: JSON.stringify(song) }),
+    getActiveRooms: () => request<any[]>('/music/active-rooms', { method: 'GET', skipLoader: true })
   },
   chats: {
     getConversations: () => request<any[]>('/chats/conversations', { method: 'GET', skipLoader: true }),

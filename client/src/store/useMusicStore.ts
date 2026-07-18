@@ -10,6 +10,7 @@ export interface Song {
   album: string;
   duration: number; // in milliseconds
   previewUrl: string;
+  artworkUrl100?: string;
   addedBy?: string;
   votes?: Record<string, 'up' | 'down'>;
   voteCount?: number;
@@ -49,9 +50,11 @@ export interface MusicRoom {
   id: string;
   name: string;
   hostId: string;
+  hostUsername: string;
   maxParticipants: number;
   isPrivate: boolean;
   players: MusicRoomPlayer[];
+  requests: Song[];
   queue: Song[];
   playbackState: {
     status: 'playing' | 'paused' | 'stopped';
@@ -95,6 +98,8 @@ interface MusicStoreState {
   room: MusicRoom | null;
   isRoomMode: boolean;
   isCreatingRoom: boolean;
+  activeRooms: any[];
+  fetchActiveRooms: () => Promise<void>;
 
   // Actions
   initAudio: () => void;
@@ -140,6 +145,7 @@ interface MusicStoreState {
   joinRoom: (roomCode: string) => void;
   leaveRoom: () => void;
   sendChatMessage: (message: string) => void;
+  approveRequest: (songId: string, action: 'approve' | 'reject') => void;
   transferHost: (targetPlayerId: string) => void;
   toggleControl: (allow: boolean) => void;
   voteSong: (songId: string, voteType: 'up' | 'down' | null) => void;
@@ -204,6 +210,7 @@ export const useMusicStore = create<MusicStoreState>((set, get) => {
     room: null,
     isRoomMode: false,
     isCreatingRoom: false,
+    activeRooms: [],
 
     // Toasts Utility
     addToast: (message, type = 'success') => {
@@ -276,6 +283,7 @@ export const useMusicStore = create<MusicStoreState>((set, get) => {
           album: t.collectionName || 'Single',
           duration: t.trackTimeMillis || 30000,
           previewUrl: t.previewUrl || '',
+          artworkUrl100: t.artworkUrl100 || '',
         })).filter((s: any) => s.previewUrl);
         set({ searchResults: results });
       } catch (err: any) {
@@ -294,6 +302,15 @@ export const useMusicStore = create<MusicStoreState>((set, get) => {
         console.error('Fetch playlists failed:', err.message);
       } finally {
         set({ isLoadingLists: false });
+      }
+    },
+
+    fetchActiveRooms: async () => {
+      try {
+        const rooms = await api.music.getActiveRooms();
+        set({ activeRooms: rooms || [] });
+      } catch (err: any) {
+        console.error('Fetch active rooms failed:', err.message);
       }
     },
 
@@ -608,14 +625,21 @@ export const useMusicStore = create<MusicStoreState>((set, get) => {
     },
 
     addToQueue: (song) => {
-      const { isRoomMode, localQueue } = get();
-      if (isRoomMode) {
+      const { isRoomMode, localQueue, room } = get();
+      if (isRoomMode && room) {
+        const currentUserId = useAuthStore.getState().user?._id || useAuthStore.getState().user?.id || '';
+        const isHost = room.hostId === currentUserId;
         const socket = useGameStore.getState().socket;
         if (socket) {
-          socket.emit('music-room:queue-update', {
-            actionType: 'add',
-            data: { song }
-          });
+          if (!isHost) {
+            socket.emit('music-room:request-song', { song });
+            get().addToast(`Requested "${song.title}" to the host!`, 'info');
+          } else {
+            socket.emit('music-room:queue-update', {
+              actionType: 'add',
+              data: { song }
+            });
+          }
         }
         return;
       }
@@ -795,6 +819,13 @@ export const useMusicStore = create<MusicStoreState>((set, get) => {
       }
     },
 
+    approveRequest: (songId, action) => {
+      const socket = useGameStore.getState().socket;
+      if (socket) {
+        socket.emit('music-room:handle-request', { songId, action });
+      }
+    },
+
     transferHost: (targetPlayerId) => {
       const socket = useGameStore.getState().socket;
       if (socket) {
@@ -829,47 +860,65 @@ export const useMusicStore = create<MusicStoreState>((set, get) => {
         get().addToast(`Room "${room.name}" created! Code: ${room.id}`, 'success');
       });
 
+      socket.on('music-room:created-success', (data: { roomCode: string }) => {
+        set({ isCreatingRoom: false });
+        get().addToast(`Lobby created! Click on the card below to join your party.`, 'success');
+      });
+
+      socket.on('music-room:public-rooms', (rooms: any[]) => {
+        set({ activeRooms: rooms || [] });
+      });
+
+      socket.on('music-room:closed', (data: { reason: string }) => {
+        get().stop();
+        set({ room: null, isRoomMode: false });
+        get().addToast(data.reason || 'Room closed by host.', 'info');
+      });
+
       socket.on('music-room:updated', (updatedRoom: MusicRoom) => {
         const { room: currentRoom, audio, currentSong, isPlaying } = get();
         get().initAudio();
 
         const activeAudio = audio || get().audio;
 
-        // Find the operator who modified state or just check updates
         set({ room: updatedRoom, isRoomMode: true });
 
-        // Update Local Audio Playback to match room synchronization
         const serverState = updatedRoom.playbackState;
         
         if (serverState.currentSong) {
           const songUrlChanged = !currentSong || currentSong.id !== serverState.currentSong.id;
           
+          // Dynamically compute real-time progress by factoring in lastUpdated to prevent chat/typing/action song restarts
+          let serverProgress = serverState.progress;
+          if (serverState.status === 'playing') {
+            const elapsed = (Date.now() - serverState.lastUpdated) / 1000;
+            const totalDuration = serverState.currentSong.duration / 1000;
+            serverProgress = Math.min(serverState.progress + elapsed, totalDuration);
+          }
+
           if (songUrlChanged) {
-            // Track changed, play the new song
             set({ currentSong: serverState.currentSong, duration: serverState.currentSong.duration / 1000 });
             if (activeAudio) {
               activeAudio.src = serverState.currentSong.previewUrl;
               if (serverState.status === 'playing') {
-                activeAudio.currentTime = serverState.progress;
+                activeAudio.currentTime = serverProgress;
                 activeAudio.play().then(() => set({ isPlaying: true })).catch(console.error);
               } else {
-                activeAudio.currentTime = serverState.progress;
+                activeAudio.currentTime = serverProgress;
                 activeAudio.pause();
                 set({ isPlaying: false });
               }
             }
           } else {
-            // Check status (play / pause status)
             if (serverState.status === 'playing') {
               if (!isPlaying && activeAudio) {
-                activeAudio.currentTime = serverState.progress;
+                activeAudio.currentTime = serverProgress;
                 activeAudio.play().then(() => set({ isPlaying: true })).catch(console.error);
               } else if (activeAudio) {
-                // If drifting by more than 2 seconds, force seek to sync
-                const drift = Math.abs(activeAudio.currentTime - serverState.progress);
+                const drift = Math.abs(activeAudio.currentTime - serverProgress);
                 if (drift > 2) {
-                  activeAudio.currentTime = serverState.progress;
-                  set({ progress: serverState.progress });
+                  activeAudio.currentTime = serverProgress;
+                  set({ progress: serverProgress });
                 }
               }
             } else if (serverState.status === 'paused') {
@@ -878,12 +927,11 @@ export const useMusicStore = create<MusicStoreState>((set, get) => {
                 set({ isPlaying: false });
               }
               if (activeAudio) {
-                activeAudio.currentTime = serverState.progress;
+                activeAudio.currentTime = serverProgress;
               }
             }
           }
         } else {
-          // No song playing, stop local playback
           if (activeAudio) {
             activeAudio.pause();
             activeAudio.src = '';
@@ -897,7 +945,10 @@ export const useMusicStore = create<MusicStoreState>((set, get) => {
       const socket = useGameStore.getState().socket;
       if (!socket) return;
       socket.off('music-room:created');
+      socket.off('music-room:created-success');
       socket.off('music-room:updated');
+      socket.off('music-room:public-rooms');
+      socket.off('music-room:closed');
     }
   };
 });

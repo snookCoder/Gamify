@@ -15,6 +15,7 @@ export interface MusicSong {
   album: string;
   duration: number; // in milliseconds
   previewUrl: string;
+  artworkUrl100?: string;
   addedBy?: string; // username
   votes?: Record<string, 'up' | 'down'>; // userId -> vote
   voteCount?: number; // upvotes - downvotes
@@ -43,10 +44,12 @@ export interface MusicRoom {
   id: string; // 5-letter code
   name: string;
   hostId: string;
+  hostUsername: string;
   maxParticipants: number;
   isPrivate: boolean;
   players: MusicRoomPlayer[];
   queue: MusicSong[];
+  requests: MusicSong[];
   playbackState: MusicRoomPlaybackState;
   allowEveryoneControl: boolean;
   chatMessages: MusicChatMessage[];
@@ -78,7 +81,16 @@ class MusicRoomManager {
     maxParticipants: number = 5,
     isPrivate: boolean = false
   ): MusicRoom {
-    // If the socket was in another room, make them leave first
+    // If the player (by hostId) is in any other room, make them leave first
+    for (const [code, r] of this.rooms.entries()) {
+      if (r.players.some(p => p.id === hostId)) {
+        const player = r.players.find(p => p.id === hostId);
+        if (player) {
+          this.leaveRoom(player.socketId);
+        }
+      }
+    }
+    // Also clean up by socketId just in case
     this.leaveRoom(socketId);
 
     const roomCode = this.generateRoomCode();
@@ -88,20 +100,12 @@ class MusicRoomManager {
       id: roomCode,
       name: roomNameClean,
       hostId,
+      hostUsername: username,
       maxParticipants,
-      isPrivate,
-      players: [
-        {
-          id: hostId,
-          username,
-          avatar,
-          rating,
-          socketId,
-          onlineStatus: 'online',
-          currentlyListening: null
-        }
-      ],
+      isPrivate: String(isPrivate) === 'true',
+      players: [],
       queue: [],
+      requests: [],
       playbackState: {
         status: 'stopped',
         currentSong: null,
@@ -139,13 +143,31 @@ class MusicRoomManager {
       throw new Error('Room not found');
     }
 
-    // Check if player is already inside the room
+    // If player is joining a different room, make them leave the current room first
     const existingPlayerIndex = room.players.findIndex((p) => p.id === playerId);
-    if (existingPlayerIndex !== -1) {
-      room.players[existingPlayerIndex].socketId = socketId;
-      room.players[existingPlayerIndex].onlineStatus = 'online';
+    if (existingPlayerIndex === -1) {
+      for (const [rCode, r] of this.rooms.entries()) {
+        if (r.players.some(p => p.id === playerId)) {
+          const player = r.players.find(p => p.id === playerId);
+          if (player) {
+            this.leaveRoom(player.socketId);
+          }
+        }
+      }
+    }
+
+    // Check if player is already inside the room (in case they reconnected to same room)
+    const updatedRoom = this.rooms.get(code);
+    if (!updatedRoom) {
+      throw new Error('Room was closed');
+    }
+
+    const recheckPlayerIndex = updatedRoom.players.findIndex((p) => p.id === playerId);
+    if (recheckPlayerIndex !== -1) {
+      updatedRoom.players[recheckPlayerIndex].socketId = socketId;
+      updatedRoom.players[recheckPlayerIndex].onlineStatus = 'online';
       this.socketToRoom.set(socketId, code);
-      return room;
+      return updatedRoom;
     }
 
     // Enforce participant limits
@@ -203,8 +225,13 @@ class MusicRoomManager {
     const leavingPlayer = room.players[playerIndex];
     room.players.splice(playerIndex, 1);
 
-    // If room is empty, delete it
-    if (room.players.length === 0) {
+    // If host left, close the room entirely. Otherwise, if room is empty, delete it.
+    const isHost = room.hostId === leavingPlayer.id;
+    if (isHost || room.players.length === 0) {
+      // Clear socket mappings for all remaining players
+      room.players.forEach(p => {
+        this.socketToRoom.delete(p.socketId);
+      });
       this.rooms.delete(code);
       return { roomCode: code, wasDeleted: true };
     }
@@ -217,20 +244,6 @@ class MusicRoomManager {
       timestamp: new Date().toISOString(),
       isSystem: true
     });
-
-    // If host left, transfer host to next player
-    if (room.hostId === leavingPlayer.id) {
-      const nextHost = room.players[0];
-      room.hostId = nextHost.id;
-      
-      room.chatMessages.push({
-        id: `${Date.now()}_host`,
-        sender: null,
-        message: `${nextHost.username} has been promoted to host`,
-        timestamp: new Date().toISOString(),
-        isSystem: true
-      });
-    }
 
     return { roomCode: code, room, wasDeleted: false };
   }
@@ -464,6 +477,57 @@ class MusicRoomManager {
     }
 
     return room;
+  }
+
+  requestSong(socketId: string, song: MusicSong): MusicRoom {
+    const room = this.getRoomBySocket(socketId);
+    if (!room) throw new Error('Room not found');
+
+    if (!room.requests) {
+      room.requests = [];
+    }
+
+    if (!room.requests.some(s => s.id === song.id) && !room.queue.some(s => s.id === song.id)) {
+      room.requests.push(song);
+    }
+
+    return room;
+  }
+
+  handleRequest(socketId: string, songId: string, action: 'approve' | 'reject'): MusicRoom {
+    const room = this.getRoomBySocket(socketId);
+    if (!room) throw new Error('Room not found');
+
+    const player = room.players.find(p => p.socketId === socketId);
+    const isHost = player && player.id === room.hostId;
+    if (!isHost) throw new Error('Only the host can manage requests');
+
+    if (!room.requests) {
+      room.requests = [];
+    }
+
+    const idx = room.requests.findIndex(s => s.id === songId);
+    if (idx !== -1) {
+      const song = room.requests[idx];
+      room.requests.splice(idx, 1);
+
+      if (action === 'approve') {
+        room.queue.push(song);
+        room.chatMessages.push({
+          id: `${Date.now()}_req_approve`,
+          sender: null,
+          message: `Request for "${song.title}" was approved by host`,
+          timestamp: new Date().toISOString(),
+          isSystem: true
+        });
+      }
+    }
+
+    return room;
+  }
+
+  getPublicRooms(): MusicRoom[] {
+    return Array.from(this.rooms.values());
   }
 }
 

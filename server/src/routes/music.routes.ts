@@ -1,6 +1,7 @@
-import { Router, Response } from 'express';
+import { Router, Request, Response } from 'express';
 import { verifyToken, AuthRequest } from '../middleware/auth.middleware';
 import { Playlist, UserMusicPreference, ISong } from '../models/UserMusic';
+import { musicRoomManager } from '../socket/musicRoomManager';
 
 const router = Router();
 
@@ -21,7 +22,11 @@ router.get('/search', async (req, res) => {
     for (const base of saavnMirrors) {
       try {
         const saavnUrl = `${base}/api/search/songs?query=${encodeURIComponent(term as string)}`;
-        const response = await fetch(saavnUrl);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 4000); // 4 seconds timeout
+        const response = await fetch(saavnUrl, { signal: controller.signal });
+        clearTimeout(timeout);
+
         if (response.ok) {
           const data = await response.json();
           if (data.success && data.data && data.data.results && data.data.results.length > 0) {
@@ -87,17 +92,17 @@ router.get('/playlists', verifyToken, async (req: AuthRequest, res: Response) =>
       console.log('Seeding default playlists from JioSaavn API for user:', userId);
       try {
         const seedCategories = [
-          { name: 'Bollywood Hits', query: 'Bollywood Hits', fallbackKey: 'bollywood' },
-          { name: 'Punjabi Hits', query: 'Punjabi Hits', fallbackKey: 'punjabi' },
-          { name: 'Hindi Romantic (KK & Arijit)', query: 'Hindi Romantic', fallbackKey: 'romantic' },
-          { name: 'English Pop Hits', query: 'English Pop', fallbackKey: 'english' }
+          { name: 'Arijit Singh Hits', query: 'Arijit Singh', fallbackKey: 'arijit' },
+          { name: 'Yo Yo Honey Singh Hits', query: 'Honey Singh', fallbackKey: 'honeysingh' },
+          { name: 'KK & Romantic Hits', query: 'KK Hits', fallbackKey: 'kk' },
+          { name: 'Popular Punjabi Hits', query: 'Punjabi Hits', fallbackKey: 'punjabi' }
         ];
 
         // Static fallbacks in case JioSaavn fetches fail
         const fallbacks: any = {
-          bollywood: [
+          arijit: [
             {
-              id: "bollywood_1",
+              id: "arijit_1",
               title: "Tum Hi Ho",
               artist: "Arijit Singh",
               album: "Aashiqui 2",
@@ -106,13 +111,80 @@ router.get('/playlists', verifyToken, async (req: AuthRequest, res: Response) =>
               artworkUrl100: "https://c.saavncdn.com/102/Aashiqui-2-Hindi-2013-500x500.jpg"
             },
             {
-              id: "bollywood_2",
+              id: "arijit_2",
               title: "Kesariya",
               artist: "Arijit Singh, Pritam",
               album: "Brahmastra",
               duration: 268000,
-              previewUrl: "https://aac.saavncdn.com/974/a933f7c9e1601a073deeb55157149a40_160.mp4",
-              artworkUrl100: "https://c.saavncdn.com/974/Brahmastra-Hindi-2022-500x500.jpg"
+              previewUrl: "https://aac.saavncdn.com/191/0c353932c6bb495fe0e6e885c42a7367_160.mp4",
+              artworkUrl100: "https://c.saavncdn.com/191/Kesariya-From-Brahmastra-Hindi-2022-20220717092820-500x500.jpg"
+            },
+            {
+              id: "arijit_3",
+              title: "Channa Mereya",
+              artist: "Arijit Singh, Pritam",
+              album: "Ae Dil Hai Mushkil",
+              duration: 289000,
+              previewUrl: "https://aac.saavncdn.com/137/582bf24a1411516e889b708cf82f70b4_160.mp4",
+              artworkUrl100: "https://c.saavncdn.com/137/Ae-Dil-Hai-Mushkil-Hindi-2016-500x500.jpg"
+            }
+          ],
+          honeysingh: [
+            {
+              id: "honey_1",
+              title: "Blue Eyes",
+              artist: "Yo Yo Honey Singh",
+              album: "Blue Eyes",
+              duration: 220000,
+              previewUrl: "https://aac.saavncdn.com/393/f300c144e59005d5d852a4ef0e854fa1_160.mp4",
+              artworkUrl100: "https://c.saavncdn.com/393/Blue-Eyes-Hindi-2013-500x500.jpg"
+            },
+            {
+              id: "honey_2",
+              title: "Dope Shope",
+              artist: "Deep Money, Yo Yo Honey Singh",
+              album: "International Villager",
+              duration: 187000,
+              previewUrl: "https://aac.saavncdn.com/219/cce44c33f2e14eb441b4e06c748c08ec_160.mp4",
+              artworkUrl100: "https://c.saavncdn.com/219/International-Villager-Punjabi-2011-500x500.jpg"
+            },
+            {
+              id: "honey_3",
+              title: "Desi Kalakaar",
+              artist: "Yo Yo Honey Singh",
+              album: "Desi Kalakaar",
+              duration: 258000,
+              previewUrl: "https://aac.saavncdn.com/181/4f2bd3f4fec9b8d22ef14cfa5f59048a_160.mp4",
+              artworkUrl100: "https://c.saavncdn.com/181/Desi-Kalakaar-Hindi-2014-500x500.jpg"
+            }
+          ],
+          kk: [
+            {
+              id: "kk_1",
+              title: "Zara Sa",
+              artist: "KK, Pritam",
+              album: "Jannat",
+              duration: 301000,
+              previewUrl: "https://aac.saavncdn.com/835/db4bb24e650c8bb90f7a08b5ea912ab8_160.mp4",
+              artworkUrl100: "https://c.saavncdn.com/835/Jannat-Hindi-2008-500x500.jpg"
+            },
+            {
+              id: "kk_2",
+              title: "Dil Ibaadat",
+              artist: "KK, Pritam",
+              album: "Tum Mile",
+              duration: 329000,
+              previewUrl: "https://aac.saavncdn.com/316/7bc5895688704839a1686d3afb07bb7d_160.mp4",
+              artworkUrl100: "https://c.saavncdn.com/316/Tum-Mile-Hindi-2009-500x500.jpg"
+            },
+            {
+              id: "kk_3",
+              title: "Tu Hi Meri Shab Hai",
+              artist: "KK, Pritam",
+              album: "Gangster",
+              duration: 374000,
+              previewUrl: "https://aac.saavncdn.com/624/e9821217646549c4ef69d7211a78ee9f_160.mp4",
+              artworkUrl100: "https://c.saavncdn.com/624/Gangster-Hindi-2006-500x500.jpg"
             }
           ],
           punjabi: [
@@ -133,46 +205,6 @@ router.get('/playlists', verifyToken, async (req: AuthRequest, res: Response) =>
               duration: 267000,
               previewUrl: "https://aac.saavncdn.com/647/e112d7c0f1b212f1cfbb52309197a1d1_160.mp4",
               artworkUrl100: "https://c.saavncdn.com/647/Brown-Munde-Punjabi-2020-500x500.jpg"
-            }
-          ],
-          romantic: [
-            {
-              id: "romantic_1",
-              title: "Dil Ibaadat",
-              artist: "KK, Pritam",
-              album: "Tum Mile",
-              duration: 329000,
-              previewUrl: "https://aac.saavncdn.com/316/7bc5895688704839a1686d3afb07bb7d_160.mp4",
-              artworkUrl100: "https://c.saavncdn.com/316/Tum-Mile-Hindi-2009-500x500.jpg"
-            },
-            {
-              id: "romantic_2",
-              title: "Zara Sa",
-              artist: "KK, Pritam",
-              album: "Jannat",
-              duration: 301000,
-              previewUrl: "https://aac.saavncdn.com/835/db4bb24e650c8bb90f7a08b5ea912ab8_160.mp4",
-              artworkUrl100: "https://c.saavncdn.com/835/Jannat-Hindi-2008-500x500.jpg"
-            }
-          ],
-          english: [
-            {
-              id: "english_1",
-              title: "Shape of You",
-              artist: "Ed Sheeran",
-              album: "Divide",
-              duration: 233000,
-              previewUrl: "https://aac.saavncdn.com/694/b53b8b15d2a210d7a6e74b5c7bdcfbe6_160.mp4",
-              artworkUrl100: "https://c.saavncdn.com/694/Shape-of-You-English-2017-500x500.jpg"
-            },
-            {
-              id: "english_2",
-              title: "Blinding Lights",
-              artist: "The Weeknd",
-              album: "After Hours",
-              duration: 200000,
-              previewUrl: "https://aac.saavncdn.com/732/6c7eeeb15da16bbf69e8b7c4bd4f5b5b_160.mp4",
-              artworkUrl100: "https://c.saavncdn.com/732/Blinding-Lights-English-2019-500x500.jpg"
             }
           ]
         };
@@ -228,7 +260,8 @@ router.get('/playlists', verifyToken, async (req: AuthRequest, res: Response) =>
             await Playlist.create({
               userId,
               name: cat.name,
-              songs: playlistSongs
+              songs: playlistSongs,
+              artworkUrl: playlistSongs[0]?.artworkUrl100 || ''
             });
           }
         }
@@ -510,6 +543,42 @@ router.post('/history', verifyToken, async (req: AuthRequest, res: Response) => 
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to record playback history' });
+  }
+});
+
+// Get active public rooms
+router.get('/active-rooms', verifyToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const rooms = musicRoomManager.getPublicRooms();
+    res.json(rooms);
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to fetch active rooms' });
+  }
+});
+
+// Proxy download to bypass browser CORS
+router.get('/download', async (req: Request, res: Response) => {
+  try {
+    const { url, filename } = req.query;
+    if (!url) {
+      return res.status(400).json({ error: 'URL parameter is required' });
+    }
+
+    const audioRes = await fetch(url as string);
+    if (!audioRes.ok) {
+      return res.status(502).json({ error: 'Failed to fetch audio file from CDN source' });
+    }
+
+    const arrayBuffer = await audioRes.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    const cleanFilename = filename ? `${filename}.mp3` : 'song.mp3';
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(cleanFilename as string)}"`);
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.send(buffer);
+  } catch (error: any) {
+    console.error('Download proxy error:', error);
+    res.status(500).json({ error: error.message || 'Failed to download track' });
   }
 });
 

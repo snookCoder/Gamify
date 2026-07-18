@@ -1,10 +1,12 @@
 import { IGameEngine } from './GameEngine';
 import { TicTacToeEngine } from './TicTacToeEngine';
 import { GuessTheSongEngine } from './GuessTheSongEngine';
+import { BingoEngine } from './BingoEngine';
 
 const gameEngines: Record<string, IGameEngine> = {
   'tic-tac-toe': new TicTacToeEngine(),
   'guess-the-song': new GuessTheSongEngine(),
+  'bingo': new BingoEngine(),
 };
 
 export const getGameEngine = (gameType: string): IGameEngine => {

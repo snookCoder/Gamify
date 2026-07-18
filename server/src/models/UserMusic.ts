@@ -7,12 +7,14 @@ export interface ISong {
   album: string;
   duration: number; // in milliseconds
   previewUrl: string;
+  artworkUrl100?: string;
 }
 
 export interface IPlaylist extends Document {
   userId: Schema.Types.ObjectId;
   name: string;
   songs: ISong[];
+  artworkUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -37,6 +39,7 @@ const SongSchema = new Schema<ISong>({
   album: { type: String },
   duration: { type: Number, required: true },
   previewUrl: { type: String, required: true },
+  artworkUrl100: { type: String },
 });
 
 const PlaylistSchema = new Schema<IPlaylist>(
@@ -44,6 +47,7 @@ const PlaylistSchema = new Schema<IPlaylist>(
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     name: { type: String, required: true, trim: true },
     songs: { type: [SongSchema], default: [] },
+    artworkUrl: { type: String },
   },
   { timestamps: true }
 );
@@ -60,6 +64,7 @@ const UserMusicPreferenceSchema = new Schema<IUserMusicPreference>(
         album: { type: String },
         duration: { type: Number, required: true },
         previewUrl: { type: String, required: true },
+        artworkUrl100: { type: String },
         playedAt: { type: Date, default: Date.now },
       },
     ],

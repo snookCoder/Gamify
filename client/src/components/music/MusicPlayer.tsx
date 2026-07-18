@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useMusicStore, Song } from '../../store/useMusicStore';
 import { useAuthStore } from '../../store/useAuthStore';
-import { Play, Pause, Square, SkipForward, SkipBack, Shuffle, Repeat, Volume2, VolumeX, FastForward, Rewind, ChevronDown } from 'lucide-react';
+import { Play, Pause, Square, SkipForward, SkipBack, Shuffle, Repeat, Volume2, VolumeX, FastForward, Rewind, ChevronDown, Download, Heart } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export const MusicPlayer: React.FC = () => {
@@ -27,7 +27,9 @@ export const MusicPlayer: React.FC = () => {
     toggleRepeat,
     isRoomMode,
     room,
-    setIsPlayerExpanded
+    setIsPlayerExpanded,
+    favorites,
+    toggleFavorite
   } = useMusicStore();
 
   const { user } = useAuthStore();
@@ -180,6 +182,15 @@ export const MusicPlayer: React.FC = () => {
           <div className={`w-36 h-36 rounded-full border-4 border-slate-950/80 bg-slate-950/60 flex items-center justify-center shadow-2xl shadow-purple-500/5 relative overflow-hidden group
             ${isPlaying ? 'animate-[spin_10s_linear_infinite]' : ''}`}
           >
+            {/* Album Cover Background */}
+            {currentSong?.artworkUrl100 && (
+              <img 
+                src={currentSong.artworkUrl100} 
+                alt={currentSong.title} 
+                className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity" 
+              />
+            )}
+
             {/* Center Pin */}
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-purple-600 border border-white/20 z-10 flex items-center justify-center">
               <div className="w-2.5 h-2.5 rounded-full bg-[#090a0f]" />
@@ -262,7 +273,18 @@ export const MusicPlayer: React.FC = () => {
         </div>
 
         {/* Main Controls Panel - 3 Buttons Layout (Prev, Play/Pause, Next) */}
-        <div className="flex items-center justify-center gap-8 w-full max-w-sm px-6">
+        <div className="flex items-center justify-center gap-6 w-full max-w-sm px-6">
+          {/* Like */}
+          <button
+            onClick={() => currentSong && toggleFavorite(currentSong)}
+            disabled={!currentSong}
+            className={`p-2.5 rounded-xl transition-colors cursor-pointer disabled:opacity-30
+              ${currentSong && favorites.some(f => f.id === currentSong.id) ? 'text-rose-500 hover:text-rose-450' : 'text-gray-400 hover:text-white'}`}
+            title="Like Song"
+          >
+            <Heart className={`w-5 h-5 ${currentSong && favorites.some(f => f.id === currentSong.id) ? 'fill-current' : ''}`} />
+          </button>
+
           {/* Prev */}
           <button
             onClick={prevSong}
@@ -291,6 +313,22 @@ export const MusicPlayer: React.FC = () => {
             title="Next Song"
           >
             <SkipForward className="w-5 h-5 fill-current" />
+          </button>
+
+          {/* Download */}
+          <button
+            onClick={() => {
+              if (currentSong) {
+                const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+                const downloadUrl = `${apiBaseUrl}/music/download?url=${encodeURIComponent(currentSong.previewUrl)}&filename=${encodeURIComponent(currentSong.title + ' - ' + currentSong.artist)}`;
+                window.open(downloadUrl, '_blank');
+              }
+            }}
+            disabled={!currentSong}
+            className="p-2.5 rounded-xl text-gray-400 hover:text-emerald-450 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Download Track"
+          >
+            <Download className="w-5 h-5" />
           </button>
         </div>
 

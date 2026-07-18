@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useMusicStore, Song } from '../../store/useMusicStore';
-import { Search, ListMusic, Heart, History, Plus, Trash2, Play, FolderPlus, Edit3, Music } from 'lucide-react';
+import { Search, ListMusic, Heart, History, Plus, Trash2, Play, FolderPlus, Edit3, Music, Lock, Unlock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuthStore } from '../../store/useAuthStore';
 
 export const MusicSidebar: React.FC = () => {
+  const { user } = useAuthStore();
   const {
     searchResults,
     playlists,
@@ -25,7 +27,10 @@ export const MusicSidebar: React.FC = () => {
     addToQueue,
     isRoomMode,
     room,
-    trendingSongs
+    trendingSongs,
+    activeRooms,
+    fetchActiveRooms,
+    joinRoom
   } = useMusicStore();
 
   const [activeTab, setActiveTab] = useState<'search' | 'playlists' | 'favorites' | 'history'>('search');
@@ -36,6 +41,8 @@ export const MusicSidebar: React.FC = () => {
   const [isEditingPlaylistId, setIsEditingPlaylistId] = useState<string | null>(null);
   const [renameInput, setRenameInput] = useState('');
   const [songMenuId, setSongMenuId] = useState<string | null>(null);
+  const [dismissedRoomIds, setDismissedRoomIds] = useState<string[]>([]);
+  const visibleRooms = activeRooms.filter(r => !dismissedRoomIds.includes(r.id));
 
   // Trigger search on debounce
   useEffect(() => {
@@ -53,7 +60,8 @@ export const MusicSidebar: React.FC = () => {
     useMusicStore.getState().fetchFavorites();
     useMusicStore.getState().fetchHistory();
     useMusicStore.getState().fetchTrendingSongs();
-  }, []);
+    fetchActiveRooms();
+  }, [fetchActiveRooms]);
 
   const handleCreatePlaylist = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -149,6 +157,88 @@ export const MusicSidebar: React.FC = () => {
                   </div>
                 ) : (
                   <>
+                    {searchResults.length === 0 && searchInput.trim() === '' && visibleRooms.length > 0 && (
+                      <div className="mb-4 animate-none">
+                        <div className="text-[10px] font-black text-emerald-400 uppercase tracking-widest font-mono mb-2 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_6px_#10b981]" />
+                          Active Rooms & Lobbies
+                        </div>
+                        <div className="space-y-2">
+                          {visibleRooms.map(r => {
+                            const songName = r.playbackState?.currentSong 
+                              ? `${r.playbackState.currentSong.title} - ${r.playbackState.currentSong.artist}`
+                              : 'Silence';
+                            const isPriv = String(r.isPrivate) === 'true';
+                            const isCurrentRoom = room && room.id === r.id;
+                            const isHost = user && (user._id === r.hostId || user.id === r.hostId);
+
+                            return (
+                              <div
+                                key={r.id}
+                                className="group p-3 bg-emerald-500/5 hover:bg-emerald-500/10 border border-emerald-500/10 rounded-2xl transition-all flex flex-col gap-1.5 relative overflow-hidden"
+                              >
+                                {/* Hide Button */}
+                                <button
+                                  onClick={() => setDismissedRoomIds(prev => [...prev, r.id])}
+                                  className="absolute top-2.5 right-2.5 text-gray-500 hover:text-rose-455 transition-colors cursor-pointer p-0.5 rounded hover:bg-white/5 z-10"
+                                  title="Hide Lobby"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+
+                                <div className="flex items-center justify-between text-xs font-black text-gray-200">
+                                  <span className="truncate pr-5 uppercase tracking-wider text-left flex items-center gap-1">
+                                    {r.name}
+                                    {isPriv ? (
+                                      <Lock className="w-2.5 h-2.5 text-purple-400 shrink-0" />
+                                    ) : (
+                                      <Unlock className="w-2.5 h-2.5 text-emerald-450 shrink-0" />
+                                    )}
+                                    {isPriv && isHost && (
+                                      <span className="text-[8px] bg-purple-500/25 border border-purple-500/30 text-purple-300 px-1 py-0.5 rounded font-mono font-black tracking-widest select-all shrink-0 ml-1" title="Share room code with friends">
+                                        🔑 {r.id}
+                                      </span>
+                                    )}
+                                  </span>
+                                  <span className="text-[8px] bg-slate-950 px-1.5 py-0.5 rounded-lg text-purple-400 shrink-0 font-mono mr-5">
+                                    {r.players.length}/{r.maxParticipants}
+                                  </span>
+                                </div>
+                                <div className="text-[9px] text-gray-400 truncate text-left">
+                                  Playing: <span className="text-emerald-400 font-medium">{songName}</span>
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    if (isCurrentRoom) return;
+                                    if (isPriv && !isHost) {
+                                      const inputCode = prompt("Enter 5-character Room Code to join:");
+                                      if (inputCode) {
+                                        if (inputCode.trim().toUpperCase() === r.id.toUpperCase()) {
+                                          joinRoom(r.id);
+                                        } else {
+                                          alert("Incorrect Room Code! Please request the host for the code.");
+                                        }
+                                      }
+                                    } else {
+                                      joinRoom(r.id);
+                                    }
+                                  }}
+                                  className={`w-full text-center rounded-xl text-[9px] font-black py-1.5 uppercase tracking-wider cursor-pointer shadow-md transition-all
+                                    ${isCurrentRoom
+                                      ? 'border border-emerald-500/35 text-emerald-450 bg-emerald-500/5 hover:bg-emerald-500/10'
+                                      : isPriv 
+                                        ? 'bg-gradient-to-r from-purple-500 to-indigo-655 hover:from-purple-400 hover:to-indigo-500 text-white' 
+                                        : 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white'}`}
+                                >
+                                  {isCurrentRoom ? '✔ Joined Lobby' : isPriv && !isHost ? 'Enter Code & Join' : 'Join Lobbies Room'}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     {searchResults.length === 0 && searchInput.trim() === '' && (
                       <div className="text-[10px] font-black text-purple-400 uppercase tracking-widest font-mono mb-2">
                         🔥 Recommended Hits
@@ -160,9 +250,13 @@ export const MusicSidebar: React.FC = () => {
                         className="group flex items-center justify-between p-2.5 bg-slate-900/30 border border-white/5 rounded-2xl hover:bg-slate-900/70 hover:border-emerald-500/20 transition-all card-transition"
                       >
                         <div className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer" onClick={() => playSong(song)}>
-                          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500/20 to-purple-500/20 flex items-center justify-center text-emerald-450 border border-white/5 relative overflow-hidden group-hover:scale-105 transition-transform shrink-0">
+                          <div className="w-8 h-8 rounded-xl bg-slate-900 border border-white/10 flex items-center justify-center text-emerald-450 relative overflow-hidden group-hover:scale-105 transition-transform shrink-0">
+                            {song.artworkUrl100 ? (
+                              <img src={song.artworkUrl100} alt={song.title} className="w-full h-full object-cover" />
+                            ) : (
+                              <Music className="w-4 h-4 text-emerald-450 group-hover:opacity-0 transition-opacity" />
+                            )}
                             <Play className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity absolute text-white" />
-                            <Music className="w-4 h-4 group-hover:opacity-0 transition-opacity" />
                           </div>
                           <div className="min-w-0">
                             <div className="text-xs font-bold text-gray-200 truncate group-hover:text-white transition-colors">{song.title}</div>
@@ -363,9 +457,18 @@ export const MusicSidebar: React.FC = () => {
                           className="group flex items-center justify-between p-2 bg-slate-900/30 border border-white/5 rounded-xl hover:bg-slate-900/70 transition-all cursor-pointer"
                           onClick={() => playSong(song)}
                         >
-                          <div className="min-w-0 flex-1 pr-2">
-                            <div className="text-xs font-bold text-gray-200 truncate group-hover:text-white">{song.title}</div>
-                            <div className="text-[9px] text-gray-400 truncate mt-0.5">{song.artist}</div>
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
+                            <div className="w-8 h-8 rounded-lg bg-slate-900 border border-white/10 flex items-center justify-center shrink-0 overflow-hidden">
+                              {song.artworkUrl100 ? (
+                                <img src={song.artworkUrl100} alt={song.title} className="w-full h-full object-cover" />
+                              ) : (
+                                <Music className="w-4 h-4 text-emerald-450" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold text-gray-200 truncate group-hover:text-white">{song.title}</div>
+                              <div className="text-[9px] text-gray-400 truncate mt-0.5">{song.artist}</div>
+                            </div>
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                             <button
@@ -426,9 +529,18 @@ export const MusicSidebar: React.FC = () => {
                       className="group flex items-center justify-between p-2.5 bg-slate-900/30 border border-white/5 rounded-2xl hover:bg-slate-900/70 hover:border-rose-500/10 transition-all card-transition cursor-pointer"
                       onClick={() => playSong(song)}
                     >
-                      <div className="min-w-0 flex-1">
-                        <div className="text-xs font-bold text-gray-200 truncate group-hover:text-white">{song.title}</div>
-                        <div className="text-[9px] text-gray-400 truncate mt-0.5">{song.artist}</div>
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <div className="w-8 h-8 rounded-lg bg-slate-900 border border-white/10 flex items-center justify-center shrink-0 overflow-hidden">
+                          {song.artworkUrl100 ? (
+                            <img src={song.artworkUrl100} alt={song.title} className="w-full h-full object-cover" />
+                          ) : (
+                            <Music className="w-4 h-4 text-emerald-450" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-gray-200 truncate group-hover:text-white">{song.title}</div>
+                          <div className="text-[9px] text-gray-400 truncate mt-0.5">{song.artist}</div>
+                        </div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                         <button
@@ -477,9 +589,18 @@ export const MusicSidebar: React.FC = () => {
                         className="group flex items-center justify-between p-2 bg-slate-900/20 border border-white/5 rounded-xl hover:bg-slate-900/60 transition-all cursor-pointer"
                         onClick={() => playSong(song)}
                       >
-                        <div className="min-w-0 flex-1">
-                          <div className="text-xs font-bold text-gray-300 truncate group-hover:text-white">{song.title}</div>
-                          <div className="text-[9px] text-gray-500 truncate">{song.artist}</div>
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <div className="w-7 h-7 rounded-lg bg-slate-900 border border-white/5 flex items-center justify-center shrink-0 overflow-hidden">
+                            {song.artworkUrl100 ? (
+                              <img src={song.artworkUrl100} alt={song.title} className="w-full h-full object-cover" />
+                            ) : (
+                              <Music className="w-3.5 h-3.5 text-emerald-450" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-gray-300 truncate group-hover:text-white">{song.title}</div>
+                            <div className="text-[9px] text-gray-550 truncate">{song.artist}</div>
+                          </div>
                         </div>
                         <button
                           onClick={(e) => {
@@ -512,9 +633,18 @@ export const MusicSidebar: React.FC = () => {
                         className="group flex items-center justify-between p-2 bg-slate-900/20 border border-white/5 rounded-xl hover:bg-slate-900/60 transition-all cursor-pointer"
                         onClick={() => playSong(song)}
                       >
-                        <div className="min-w-0 flex-1">
-                          <div className="text-xs font-bold text-gray-300 truncate group-hover:text-white">{song.title}</div>
-                          <div className="text-[9px] text-gray-500 truncate">{song.artist}</div>
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <div className="w-7 h-7 rounded-lg bg-slate-900 border border-white/5 flex items-center justify-center shrink-0 overflow-hidden">
+                            {song.artworkUrl100 ? (
+                              <img src={song.artworkUrl100} alt={song.title} className="w-full h-full object-cover" />
+                            ) : (
+                              <Music className="w-3.5 h-3.5 text-emerald-450" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-gray-300 truncate group-hover:text-white">{song.title}</div>
+                            <div className="text-[9px] text-gray-550 truncate">{song.artist}</div>
+                          </div>
                         </div>
                         <button
                           onClick={(e) => {
